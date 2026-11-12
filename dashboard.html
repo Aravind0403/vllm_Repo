@@ -1,0 +1,1147 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PR Radar — Live Merges & Dependency DAG</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              500: '#10b981',
+              600: '#059669',
+            },
+            dark: {
+              800: '#1e222d',
+              850: '#151821',
+              900: '#0f1117',
+              950: '#090a0f',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Cytoscape.js & Dagre Layout Engine -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dagre@0.8.5/dist/dagre.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.min.js"></script>
+
+  <!-- Phosphor Icons -->
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+  <style>
+    /* Custom scrollbars */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0f1117; }
+    ::-webkit-scrollbar-thumb { background: #272d3b; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #3b4252; }
+
+    #cy {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 1;
+    }
+  </style>
+</head>
+<body class="bg-dark-950 text-slate-200 h-screen flex flex-col font-sans antialiased overflow-hidden select-none">
+
+  <!-- Top Navbar -->
+  <header class="h-14 border-b border-slate-800 bg-dark-900 px-5 flex items-center justify-between shrink-0 z-20">
+    <div class="flex items-center gap-4">
+      <div class="flex items-center gap-2">
+        <span class="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold">
+          <i class="ph-bold ph-git-merge text-lg"></i>
+        </span>
+        <span class="font-bold text-white text-base tracking-tight">PR Radar</span>
+        <span class="text-xs px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono">live-merges</span>
+      </div>
+
+      <div class="h-4 w-px bg-slate-800"></div>
+
+      <!-- Repo Display -->
+      <div class="flex items-center gap-2">
+        <span class="text-xs text-slate-400 font-medium">Repository:</span>
+        <div class="flex items-center gap-1.5 bg-dark-850 border border-slate-700/60 rounded-md px-2.5 py-1 text-xs font-mono text-slate-200">
+          <i class="ph ph-github-logo text-sm text-slate-400"></i>
+          <span id="repoNameDisplay">vllm-project/vllm</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- View Mode Switcher -->
+    <div class="flex items-center gap-1 bg-dark-950 p-1 rounded-lg border border-slate-800">
+      <button id="tabGraphBtn" onclick="switchView('graph')" class="flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-semibold bg-emerald-500 text-white shadow-sm transition">
+        <i class="ph-bold ph-tree-structure text-sm"></i>
+        Dependency DAG
+      </button>
+      <button id="tabCollisionBtn" onclick="switchView('collisions')" class="flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-semibold text-slate-400 hover:text-slate-200 transition">
+        <i class="ph-bold ph-fire text-sm text-amber-400"></i>
+        Collision Radar & Hotspots
+      </button>
+      <button id="tabTriageBtn" onclick="switchView('triage')" class="flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-semibold text-slate-400 hover:text-slate-200 transition">
+        <i class="ph-bold ph-kanban text-sm text-cyan-400"></i>
+        Release Triage Board
+      </button>
+    </div>
+
+    <!-- Stats in Nav -->
+    <div class="flex items-center gap-4 text-xs font-medium text-slate-400">
+      <div class="flex items-center gap-1.5">
+        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+        <span>Open PRs: <strong id="statTotalPrs" class="text-white">0</strong></span>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <span class="w-2 h-2 rounded-full bg-fuchsia-400"></span>
+        <span>Stacks: <strong id="statStacks" class="text-white">0</strong></span>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <span class="w-2 h-2 rounded-full bg-rose-400"></span>
+        <span>Collisions: <strong id="statCollisions" class="text-white">0</strong></span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Filter & Subsystem Toolbar -->
+  <div class="h-11 border-b border-slate-800/80 bg-dark-850 px-5 flex items-center justify-between shrink-0 text-xs z-10">
+    <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1" id="subsystemFilterBar">
+      <span class="text-slate-500 font-semibold uppercase text-[10px] tracking-wider shrink-0 mr-1">Subsystems:</span>
+      <button onclick="setSubsystemFilter('ALL', event)" class="subsystem-pill px-2.5 py-0.5 rounded-full font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 transition">All</button>
+      <button onclick="setSubsystemFilter('V1', event)" class="subsystem-pill px-2.5 py-0.5 rounded-full font-medium bg-slate-800 text-slate-400 hover:text-slate-200 transition">V1 Engine</button>
+      <button onclick="setSubsystemFilter('Attention|kernel|flash|gdn', event)" class="subsystem-pill px-2.5 py-0.5 rounded-full font-medium bg-slate-800 text-slate-400 hover:text-slate-200 transition">Attention & Kernels</button>
+      <button onclick="setSubsystemFilter('ROCm|AMD', event)" class="subsystem-pill px-2.5 py-0.5 rounded-full font-medium bg-slate-800 text-slate-400 hover:text-slate-200 transition">ROCm / AMD</button>
+      <button onclick="setSubsystemFilter('TPU|Neuron|XPU', event)" class="subsystem-pill px-2.5 py-0.5 rounded-full font-medium bg-slate-800 text-slate-400 hover:text-slate-200 transition">TPU & Hardware</button>
+      <button onclick="setSubsystemFilter('Quant|FP8|MXFP4|AWQ|Quark', event)" class="subsystem-pill px-2.5 py-0.5 rounded-full font-medium bg-slate-800 text-slate-400 hover:text-slate-200 transition">Quantization</button>
+      <button onclick="setSubsystemFilter('Spec|eagle|mtp|draft', event)" class="subsystem-pill px-2.5 py-0.5 rounded-full font-medium bg-slate-800 text-slate-400 hover:text-slate-200 transition">Speculative</button>
+      <button onclick="setSubsystemFilter('MoE|parallel|distributed', event)" class="subsystem-pill px-2.5 py-0.5 rounded-full font-medium bg-slate-800 text-slate-400 hover:text-slate-200 transition">Distributed / MoE</button>
+      <button onclick="setSubsystemFilter('serve|api|entrypoint', event)" class="subsystem-pill px-2.5 py-0.5 rounded-full font-medium bg-slate-800 text-slate-400 hover:text-slate-200 transition">API & Serving</button>
+    </div>
+
+    <!-- Active Filter Indicator & Search box -->
+    <div class="flex items-center gap-3">
+      <span id="activeFilterBadge" class="hidden text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-mono">
+        Filtered
+      </span>
+      <div class="relative w-64">
+        <i class="ph ph-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500"></i>
+        <input id="searchInput" type="text" placeholder="Filter PR #, title, author, file..." 
+          oninput="handleSearch(this.value)"
+          class="w-full bg-dark-900 border border-slate-700/80 rounded-md pl-8 pr-3 py-1 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition">
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Workspace -->
+  <main class="flex-1 relative overflow-hidden flex h-full">
+
+    <!-- VIEW 1: DAG Graph View -->
+    <div id="viewGraph" class="w-full h-full relative">
+      <div id="cy" style="width:100%; height:100%; position:absolute; inset:0;"></div>
+
+      <!-- Graph Top Controls -->
+      <div class="absolute top-4 left-5 bg-dark-900/90 backdrop-blur border border-slate-800 rounded-lg p-1.5 flex items-center gap-2 shadow-xl z-10 text-xs">
+        <span class="text-slate-400 text-[11px] font-semibold pl-2">Display Scope:</span>
+        <button id="dagScopeStacksBtn" onclick="setDagScope('stacks')" class="px-2.5 py-1 rounded text-xs font-semibold bg-emerald-500 text-white transition">
+          Stacks & Chains Only (<span id="dagStacksCount">0</span>)
+        </button>
+        <button id="dagScopeAllBtn" onclick="setDagScope('all')" class="px-2.5 py-1 rounded text-xs font-semibold bg-slate-800 text-slate-400 hover:text-slate-200 transition">
+          Show All Open PRs (<span id="dagAllCount">0</span>)
+        </button>
+      </div>
+
+      <!-- Empty / Fallback State if no edges -->
+      <div id="graphEmptyNotice" class="hidden absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-dark-900/95 border border-slate-800 rounded-xl p-6 text-center max-w-md shadow-2xl z-10">
+        <i class="ph-bold ph-tree-structure text-3xl text-emerald-400 mb-2"></i>
+        <h4 class="text-sm font-bold text-white">No Stacks Match Current Subsystem</h4>
+        <p class="text-xs text-slate-400 mt-1">Try switching the filter to 'All' or click 'Show All Open PRs' to view individual PR nodes.</p>
+        <button onclick="setSubsystemFilter('ALL')" class="mt-4 px-3 py-1.5 rounded bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold transition">
+          Reset to All Subsystems
+        </button>
+      </div>
+      
+      <!-- Graph Legend Overlay -->
+      <div class="absolute bottom-5 left-5 bg-dark-900/90 backdrop-blur border border-slate-800 rounded-lg p-3 flex flex-col gap-2 shadow-xl z-10 text-xs">
+        <span class="text-slate-400 font-semibold text-[11px] uppercase tracking-wider">DAG Legend & State</span>
+        <div class="flex items-center gap-2">
+          <span class="w-3 h-3 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50"></span>
+          <span>Ready to Merge (Green CI)</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="w-3 h-3 rounded-full bg-fuchsia-500 shadow-sm shadow-fuchsia-500/50"></span>
+          <span>Blocked on Stack PR</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="w-3 h-3 rounded-full bg-cyan-500"></span>
+          <span>Waiting on Review</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="w-3 h-3 rounded-full bg-rose-500 shadow-sm shadow-rose-500/50"></span>
+          <span>CI Failure</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="w-3 h-3 rounded-full bg-slate-600"></span>
+          <span>External / Upstream Base</span>
+        </div>
+        <div class="pt-2 border-t border-slate-800 flex items-center justify-between gap-2">
+          <button onclick="resetGraphView()" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] transition">
+            <i class="ph ph-arrows-out-cardinal mr-1"></i>Reset View
+          </button>
+          <span class="text-[10px] text-slate-500 font-mono">Rank: Base ↑ Stack</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW 2: Collisions & Hotspots -->
+    <div id="viewCollisions" class="hidden flex-1 overflow-y-auto p-6 bg-dark-950 space-y-6">
+      
+      <!-- Top Hotspot Files -->
+      <div class="bg-dark-900 border border-slate-800 rounded-xl p-5 shadow-lg">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h3 class="text-sm font-bold text-white flex items-center gap-2">
+              <i class="ph-fill ph-fire text-rose-500 text-base"></i>
+              Conflict Hotspot Files
+              <span id="hotspotsCountBadge" class="text-xs px-2 py-0.5 rounded-full bg-dark-850 text-slate-300 font-mono border border-slate-700">0</span>
+            </h3>
+            <p class="text-xs text-slate-400 mt-0.5">Files currently modified by multiple open PRs (showing idle days of touching PRs)</p>
+          </div>
+          <span class="text-xs px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20 font-medium">Merge Conflict Hazard</span>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3" id="hotspotContainer">
+          <!-- Injected via JS -->
+        </div>
+      </div>
+
+      <!-- Pairwise Collisions -->
+      <div class="bg-dark-900 border border-slate-800 rounded-xl p-5 shadow-lg">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h3 class="text-sm font-bold text-white flex items-center gap-2">
+              <i class="ph-bold ph-warning-diamond text-amber-400 text-base"></i>
+              Pairwise PR Collision Radar
+              <span id="collisionsCountBadge" class="text-xs px-2 py-0.5 rounded-full bg-dark-850 text-slate-300 font-mono border border-slate-700">0</span>
+            </h3>
+            <p class="text-xs text-slate-400 mt-0.5">Detects <strong class="text-rose-400">Live Merge Races</strong> (both active &lt; 5d) vs <strong class="text-slate-400">Stale Overlaps</strong></p>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr class="border-b border-slate-800 text-slate-400 uppercase text-[10px] tracking-wider">
+                <th class="py-2.5 px-3">PR A (Idle Days)</th>
+                <th class="py-2.5 px-3">PR B (Idle Days)</th>
+                <th class="py-2.5 px-3">Collision Dynamics</th>
+                <th class="py-2.5 px-3">Risk Level</th>
+                <th class="py-2.5 px-3">Score</th>
+                <th class="py-2.5 px-3">Shared Churn</th>
+                <th class="py-2.5 px-3">Overlapping Files</th>
+              </tr>
+            </thead>
+            <tbody id="collisionTableBody" class="divide-y divide-slate-800/60 font-mono">
+              <!-- Injected via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW 3: Triage Kanban -->
+    <div id="viewTriage" class="hidden flex-1 overflow-x-auto p-6 bg-dark-950 flex gap-4">
+      
+      <!-- Column 1: Ready to Merge -->
+      <div class="w-80 shrink-0 flex flex-col bg-dark-900 border border-slate-800 rounded-xl overflow-hidden">
+        <div class="p-3 border-b border-slate-800 bg-emerald-500/5 flex items-center justify-between">
+          <span class="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+            Ready to Merge
+          </span>
+          <span id="colCountReady" class="text-xs px-2 py-0.5 rounded-full bg-dark-850 text-emerald-400 font-bold border border-emerald-500/30">0</span>
+        </div>
+        <div id="colReadyList" class="p-3 flex-1 overflow-y-auto space-y-2.5"></div>
+      </div>
+
+      <!-- Column 2: Blocked on Stack PR -->
+      <div class="w-80 shrink-0 flex flex-col bg-dark-900 border border-slate-800 rounded-xl overflow-hidden">
+        <div class="p-3 border-b border-slate-800 bg-fuchsia-500/5 flex items-center justify-between">
+          <span class="text-xs font-bold text-fuchsia-400 flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-fuchsia-400"></span>
+            Blocked on Dependency
+          </span>
+          <span id="colCountBlocked" class="text-xs px-2 py-0.5 rounded-full bg-dark-850 text-fuchsia-400 font-bold border border-fuchsia-500/30">0</span>
+        </div>
+        <div id="colBlockedList" class="p-3 flex-1 overflow-y-auto space-y-2.5"></div>
+      </div>
+
+      <!-- Column 3: Waiting for Review -->
+      <div class="w-80 shrink-0 flex flex-col bg-dark-900 border border-slate-800 rounded-xl overflow-hidden">
+        <div class="p-3 border-b border-slate-800 bg-cyan-500/5 flex items-center justify-between">
+          <span class="text-xs font-bold text-cyan-400 flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+            Waiting for Review
+          </span>
+          <span id="colCountReview" class="text-xs px-2 py-0.5 rounded-full bg-dark-850 text-cyan-400 font-bold border border-cyan-500/30">0</span>
+        </div>
+        <div id="colReviewList" class="p-3 flex-1 overflow-y-auto space-y-2.5"></div>
+      </div>
+
+      <!-- Column 4: CI Failure / Conflicting -->
+      <div class="w-80 shrink-0 flex flex-col bg-dark-900 border border-slate-800 rounded-xl overflow-hidden">
+        <div class="p-3 border-b border-slate-800 bg-rose-500/5 flex items-center justify-between">
+          <span class="text-xs font-bold text-rose-400 flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-rose-400"></span>
+            Failing CI / Conflicting
+          </span>
+          <span id="colCountFail" class="text-xs px-2 py-0.5 rounded-full bg-dark-850 text-rose-400 font-bold border border-rose-500/30">0</span>
+        </div>
+        <div id="colFailList" class="p-3 flex-1 overflow-y-auto space-y-2.5"></div>
+      </div>
+
+      <!-- Column 5: Draft / WIP -->
+      <div class="w-80 shrink-0 flex flex-col bg-dark-900 border border-slate-800 rounded-xl overflow-hidden">
+        <div class="p-3 border-b border-slate-800 bg-slate-500/5 flex items-center justify-between">
+          <span class="text-xs font-bold text-slate-400 flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-slate-500"></span>
+            Draft / In Progress
+          </span>
+          <span id="colCountDraft" class="text-xs px-2 py-0.5 rounded-full bg-dark-850 text-slate-400 font-bold border border-slate-500/30">0</span>
+        </div>
+        <div id="colDraftList" class="p-3 flex-1 overflow-y-auto space-y-2.5"></div>
+      </div>
+    </div>
+
+    <!-- Slide-over Drawer for PR Dossier -->
+    <aside id="dossierDrawer" class="w-96 border-l border-slate-800 bg-dark-900 shrink-0 flex flex-col h-full transform translate-x-full transition-transform duration-200 ease-in-out z-30 shadow-2xl absolute right-0 top-0">
+      <div class="p-4 border-b border-slate-800 flex items-center justify-between bg-dark-850">
+        <div class="flex items-center gap-2">
+          <span id="drawerPrBadge" class="text-xs px-2 py-0.5 rounded font-bold font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">PR #0</span>
+          <span id="drawerStatusBadge" class="text-xs px-2 py-0.5 rounded font-semibold bg-slate-800 text-slate-300">Status</span>
+        </div>
+        <button onclick="closeDrawer()" class="text-slate-400 hover:text-white p-1">
+          <i class="ph ph-x text-base"></i>
+        </button>
+      </div>
+
+      <div class="flex-1 overflow-y-auto p-5 space-y-5 text-xs">
+        <div>
+          <h2 id="drawerTitle" class="text-sm font-bold text-white leading-snug">PR Title</h2>
+          <div class="mt-2 flex flex-wrap items-center gap-2 text-slate-400 text-[11px]">
+            <span>by <strong id="drawerAuthor" class="text-slate-200">author</strong></span>
+            <span>•</span>
+            <span id="drawerIdleDays" class="text-amber-400 font-mono">0d idle</span>
+            <span>•</span>
+            <span id="drawerUpdatedDate" class="text-slate-500 font-mono">Date</span>
+            <span>•</span>
+            <a id="drawerGithubLink" href="#" target="_blank" class="text-emerald-400 hover:underline flex items-center gap-1 font-mono">
+              GitHub <i class="ph ph-arrow-square-out text-xs"></i>
+            </a>
+          </div>
+        </div>
+
+        <!-- Diagnosis Box -->
+        <div class="bg-dark-950 border border-slate-800/80 rounded-lg p-3">
+          <span class="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Engine Diagnosis</span>
+          <p id="drawerDiagnosis" class="text-xs text-slate-200 mt-1 font-medium">Awaiting maintainer review</p>
+        </div>
+
+        <!-- Technical Signals -->
+        <div>
+          <span class="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Technical Signals</span>
+          <div class="grid grid-cols-2 gap-2 mt-2">
+            <div class="bg-dark-950 p-2 rounded border border-slate-800/80">
+              <span class="text-slate-500 text-[10px]">CI Check</span>
+              <p id="drawerCi" class="font-bold text-slate-200 mt-0.5 font-mono">SUCCESS</p>
+            </div>
+            <div class="bg-dark-950 p-2 rounded border border-slate-800/80">
+              <span class="text-slate-500 text-[10px]">Review Decision</span>
+              <p id="drawerReview" class="font-bold text-slate-200 mt-0.5 font-mono">APPROVED</p>
+            </div>
+            <div class="bg-dark-950 p-2 rounded border border-slate-800/80">
+              <span class="text-slate-500 text-[10px]">Mergeable State</span>
+              <p id="drawerMergeable" class="font-bold text-slate-200 mt-0.5 font-mono">MERGEABLE</p>
+            </div>
+            <div class="bg-dark-950 p-2 rounded border border-slate-800/80">
+              <span class="text-slate-500 text-[10px]">Changed Files</span>
+              <p id="drawerFilesCount" class="font-bold text-slate-200 mt-0.5 font-mono">12 files</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dependency Stacks -->
+        <div>
+          <span class="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Dependencies & Stacks</span>
+          <div class="mt-2 space-y-2">
+            <div>
+              <span class="text-[11px] text-slate-400">Blocked by (Upstream PRs):</span>
+              <div id="drawerBlockedBy" class="flex flex-wrap gap-1.5 mt-1 text-slate-300 font-mono">
+                <span class="text-slate-500 italic font-sans text-xs">None (Unblocked)</span>
+              </div>
+            </div>
+            <div>
+              <span class="text-[11px] text-slate-400">Blocks (Downstream PRs):</span>
+              <div id="drawerBlocks" class="flex flex-wrap gap-1.5 mt-1 text-slate-300 font-mono">
+                <span class="text-slate-500 italic font-sans text-xs">None</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Colliding PRs -->
+        <div>
+          <span class="text-[10px] uppercase font-bold text-slate-500 tracking-wider">File Collisions (Concurrent PRs)</span>
+          <div id="drawerCollisionsList" class="mt-2 space-y-2">
+            <span class="text-slate-500 italic text-xs">No file collisions detected</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+  </main>
+
+  <!-- Embedded PR Data Script & Application Logic -->
+  <script>
+    // Global State
+    let DATA = null;
+    window.__EMBEDDED_PR_RADAR_DATA__ = {"summary": {"repo": "vllm-project/vllm", "total_open_prs_analyzed": 40, "status_breakdown": {"WAITING_REVIEW": 12, "CONFLICTING": 1, "DRAFT": 5, "CI_FAILURE": 18, "BLOCKED_BY_DEP": 2, "READY_TO_MERGE": 2}, "foundational_unblockers": [62750, 56606, 61779, 52838, 63675], "dependency_stacks_count": 5, "critical_file_collisions": 11, "top_hotspot_files": [{"path": "vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py", "pr_count": 4, "churn": 606}, {"path": "vllm/v1/attention/backends/gdn_attn.py", "pr_count": 3, "churn": 452}, {"path": "vllm/model_executor/layers/attention/mla_attention.py", "pr_count": 3, "churn": 122}, {"path": "vllm/v1/core/sched/scheduler.py", "pr_count": 3, "churn": 69}, {"path": "tests/watermarking/watermarking_goldens.json", "pr_count": 2, "churn": 5447}]}, "prs": [{"number": 51406, "title": "[ROCm] Enable fused QK-norm+RoPE+gate Triton kernel for Qwen3-Next/Qwen3.5", "url": "https://github.com/vllm-project/vllm/pull/51406", "author": "xuebwang", "status": "WAITING_REVIEW", "reason": "Approved with pending requirements", "ci_status": "SUCCESS", "review_decision": "APPROVED", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Aug 07, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 2, "collisions": []}, {"number": 52244, "title": "[Bugfix][V1] Restore hybrid GDN prefix-cache hits under MTP spec decoding", "url": "https://github.com/vllm-project/vllm/pull/52244", "author": "Y-aang", "status": "CONFLICTING", "reason": "Merge conflict with base branch", "ci_status": "FAILURE", "review_decision": "REVIEW_REQUIRED", "mergeable": "CONFLICTING", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Aug 14, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 6, "collisions": [{"colliding_pr": 64927, "risk_level": "MEDIUM", "collision_score": 0.183, "overlapping_files": ["vllm/v1/core/sched/scheduler.py"]}, {"colliding_pr": 65399, "risk_level": "MEDIUM", "collision_score": 0.123, "overlapping_files": ["vllm/v1/core/sched/scheduler.py"]}]}, {"number": 65398, "title": "[Quantization] Add mxfp4_hadamard32_moe online quantization", "url": "https://github.com/vllm-project/vllm/pull/65398", "author": "mgoin", "status": "DRAFT", "reason": "Marked as draft / work in progress", "ci_status": "PENDING", "review_decision": "NONE", "mergeable": "UNKNOWN", "is_draft": true, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Nov 03, 2026", "blocked_by": [62750, 56606], "blocks": [], "files_changed_count": 21, "collisions": [{"colliding_pr": 62093, "risk_level": "LOW", "collision_score": 0.057, "overlapping_files": ["vllm/platforms/rocm.py"]}, {"colliding_pr": 65143, "risk_level": "LOW", "collision_score": 0.045, "overlapping_files": ["vllm/model_executor/layers/quantization/base_config.py"]}]}, {"number": 65305, "title": "[Feature][PCP] Support DeepSeek V4 with FlashMLA on NVIDIA", "url": "https://github.com/vllm-project/vllm/pull/65305", "author": "pisceskkk", "status": "DRAFT", "reason": "Marked as draft / work in progress", "ci_status": "FAILURE", "review_decision": "NONE", "mergeable": "MERGEABLE", "is_draft": true, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Nov 03, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 22, "collisions": [{"colliding_pr": 63956, "risk_level": "CRITICAL", "collision_score": 0.431, "overlapping_files": ["vllm/model_executor/layers/sparse_attn_indexer.py", "vllm/v1/attention/backends/mla/indexer.py"]}, {"colliding_pr": 62941, "risk_level": "MEDIUM", "collision_score": 0.088, "overlapping_files": ["vllm/v1/attention/backends/mla/sparse_swa.py"]}, {"colliding_pr": 64560, "risk_level": "LOW", "collision_score": 0.043, "overlapping_files": ["vllm/v1/attention/backend.py"]}]}, {"number": 65403, "title": "[Perf][Sparse MLA][GLM-5.3] Index-group workspace savings, indexer gate GEMM, opt-in masked-MHA prefill on quantized KV", "url": "https://github.com/vllm-project/vllm/pull/65403", "author": "gaby", "status": "CI_FAILURE", "reason": "CI checks are failing", "ci_status": "FAILURE", "review_decision": "REVIEW_REQUIRED", "mergeable": "MERGEABLE", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Nov 03, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 19, "collisions": [{"colliding_pr": 63956, "risk_level": "CRITICAL", "collision_score": 0.512, "overlapping_files": ["tests/v1/attention/test_sparse_mla_backends.py", "vllm/config/attention.py", "vllm/model_executor/layers/attention/mla_attention.py", "vllm/model_executor/layers/attention/sparse_mla_attention.py", "vllm/models/glm5next/common/attention.py", "vllm/models/glm5next/common/model.py"]}, {"colliding_pr": 64560, "risk_level": "CRITICAL", "collision_score": 0.455, "overlapping_files": ["tests/v1/attention/test_mla_backends.py", "vllm/model_executor/layers/attention/mla_attention.py"]}]}, {"number": 63956, "title": "[Perf][DSA] Token-sharded sparse-MLA prefill under TP; remove indexer row sharding", "url": "https://github.com/vllm-project/vllm/pull/63956", "author": "ZJY0516", "status": "WAITING_REVIEW", "reason": "Awaiting maintainer review", "ci_status": "SUCCESS", "review_decision": "NONE", "mergeable": "MERGEABLE", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Oct 27, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 19, "collisions": [{"colliding_pr": 65403, "risk_level": "CRITICAL", "collision_score": 0.512, "overlapping_files": ["tests/v1/attention/test_sparse_mla_backends.py", "vllm/config/attention.py", "vllm/model_executor/layers/attention/mla_attention.py", "vllm/model_executor/layers/attention/sparse_mla_attention.py", "vllm/models/glm5next/common/attention.py", "vllm/models/glm5next/common/model.py"]}, {"colliding_pr": 65305, "risk_level": "CRITICAL", "collision_score": 0.431, "overlapping_files": ["vllm/model_executor/layers/sparse_attn_indexer.py", "vllm/v1/attention/backends/mla/indexer.py"]}, {"colliding_pr": 64560, "risk_level": "HIGH", "collision_score": 0.214, "overlapping_files": ["vllm/model_executor/layers/attention/mla_attention.py"]}]}, {"number": 63086, "title": "[ROCm][Kimi-K3] Enable encoder graph capture for Kimi-K3 Vision Tower", "url": "https://github.com/vllm-project/vllm/pull/63086", "author": "samutamm", "status": "WAITING_REVIEW", "reason": "Awaiting maintainer review", "ci_status": "PENDING", "review_decision": "REVIEW_REQUIRED", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Oct 22, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 2, "collisions": []}, {"number": 64927, "title": "[Core][Scheduler] Add an opt-in time-bounded prefill hold", "url": "https://github.com/vllm-project/vllm/pull/64927", "author": "vorapolsiloai", "status": "DRAFT", "reason": "Marked as draft / work in progress", "ci_status": "FAILURE", "review_decision": "REVIEW_REQUIRED", "mergeable": "UNKNOWN", "is_draft": true, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Oct 31, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 3, "collisions": [{"colliding_pr": 65399, "risk_level": "CRITICAL", "collision_score": 0.64, "overlapping_files": ["tests/v1/core/test_scheduler.py", "vllm/v1/core/sched/scheduler.py"]}, {"colliding_pr": 52244, "risk_level": "MEDIUM", "collision_score": 0.183, "overlapping_files": ["vllm/v1/core/sched/scheduler.py"]}, {"colliding_pr": 62941, "risk_level": "MEDIUM", "collision_score": 0.127, "overlapping_files": ["vllm/envs.py"]}]}, {"number": 61952, "title": "[Perf][GDN] Capture the GDN core in breakable CUDA graphs of mixed batches (CUDA graph 2/2)", "url": "https://github.com/vllm-project/vllm/pull/61952", "author": "kimseunghyun-kr", "status": "BLOCKED_BY_DEP", "reason": "Blocked on open dependency: #61779", "ci_status": "SUCCESS", "review_decision": "REVIEW_REQUIRED", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Oct 16, 2026", "blocked_by": [61779], "blocks": [], "files_changed_count": 18, "collisions": [{"colliding_pr": 63284, "risk_level": "CRITICAL", "collision_score": 0.457, "overlapping_files": ["vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py", "vllm/v1/attention/backends/gdn_attn.py"]}, {"colliding_pr": 56307, "risk_level": "CRITICAL", "collision_score": 0.441, "overlapping_files": ["vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py", "vllm/v1/attention/backends/gdn_attn.py"]}, {"colliding_pr": 64621, "risk_level": "CRITICAL", "collision_score": 0.433, "overlapping_files": ["vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py"]}, {"colliding_pr": 63676, "risk_level": "MEDIUM", "collision_score": 0.068, "overlapping_files": ["vllm/v1/attention/backends/utils.py"]}]}, {"number": 51156, "title": "[Bugfix][Spec Decode] Bound draft max_model_len by the target before logging", "url": "https://github.com/vllm-project/vllm/pull/51156", "author": "adityasingh2400", "status": "CI_FAILURE", "reason": "CI checks are failing", "ci_status": "FAILURE", "review_decision": "REVIEW_REQUIRED", "mergeable": "MERGEABLE", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Aug 05, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 2, "collisions": [{"colliding_pr": 58426, "risk_level": "MEDIUM", "collision_score": 0.144, "overlapping_files": ["tests/test_config.py"]}]}, {"number": 43548, "title": "[Bugfix] Expand YAML config when passed as `--config=<path>`", "url": "https://github.com/vllm-project/vllm/pull/43548", "author": "adityasingh2400", "status": "CI_FAILURE", "reason": "CI checks are failing", "ci_status": "FAILURE", "review_decision": "REVIEW_REQUIRED", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "May 25, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 2, "collisions": []}, {"number": 56451, "title": "[ROCm][Spec Decode] Enable adaptive DSpark verification for MiniMax M3", "url": "https://github.com/vllm-project/vllm/pull/56451", "author": "olka-amd", "status": "WAITING_REVIEW", "reason": "Awaiting maintainer review", "ci_status": "PENDING", "review_decision": "REVIEW_REQUIRED", "mergeable": "MERGEABLE", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Sep 11, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 13, "collisions": []}, {"number": 65076, "title": "[KVConnector][Mooncake] Add per-GPU device names for MooncakeStoreConnector", "url": "https://github.com/vllm-project/vllm/pull/65076", "author": "whx-sjtu", "status": "READY_TO_MERGE", "reason": "Approved, waiting for CI completion", "ci_status": "PENDING", "review_decision": "APPROVED", "mergeable": "MERGEABLE", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Nov 02, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 4, "collisions": []}, {"number": 64624, "title": "[Hybrid] Round the attention block size up to prefix_match_unit", "url": "https://github.com/vllm-project/vllm/pull/64624", "author": "emmericp", "status": "CI_FAILURE", "reason": "CI checks are failing", "ci_status": "FAILURE", "review_decision": "REVIEW_REQUIRED", "mergeable": "MERGEABLE", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Oct 30, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 3, "collisions": [{"colliding_pr": 65402, "risk_level": "MEDIUM", "collision_score": 0.242, "overlapping_files": ["tests/v1/worker/test_gpu_model_runner.py"]}]}, {"number": 62941, "title": "[Perf][DSv4.1] Pack DSpark verify positions into one FlashMLA head tile on SM90", "url": "https://github.com/vllm-project/vllm/pull/62941", "author": "luoyuctl", "status": "DRAFT", "reason": "Marked as draft / work in progress", "ci_status": "FAILURE", "review_decision": "REVIEW_REQUIRED", "mergeable": "UNKNOWN", "is_draft": true, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Oct 21, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 6, "collisions": [{"colliding_pr": 59418, "risk_level": "CRITICAL", "collision_score": 0.533, "overlapping_files": ["tests/kernels/attention/test_flashmla_sparse.py", "vllm/models/deepseek_v41/nvidia/flashmla.py"]}, {"colliding_pr": 64927, "risk_level": "MEDIUM", "collision_score": 0.127, "overlapping_files": ["vllm/envs.py"]}, {"colliding_pr": 65305, "risk_level": "MEDIUM", "collision_score": 0.088, "overlapping_files": ["vllm/v1/attention/backends/mla/sparse_swa.py"]}]}, {"number": 59418, "title": "[Perf][DSv4.1] Small-head sparse decode on SM90", "url": "https://github.com/vllm-project/vllm/pull/59418", "author": "luoyuctl", "status": "WAITING_REVIEW", "reason": "Awaiting maintainer review", "ci_status": "SUCCESS", "review_decision": "NONE", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Sep 30, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 5, "collisions": [{"colliding_pr": 62941, "risk_level": "CRITICAL", "collision_score": 0.533, "overlapping_files": ["tests/kernels/attention/test_flashmla_sparse.py", "vllm/models/deepseek_v41/nvidia/flashmla.py"]}, {"colliding_pr": 64765, "risk_level": "LOW", "collision_score": 0.043, "overlapping_files": [".buildkite/test_areas/kernels.yaml"]}]}, {"number": 57292, "title": "[Bugfix][DSv4.1] Fail fast on SM120 when FlashInfer lacks runtime page sizes", "url": "https://github.com/vllm-project/vllm/pull/57292", "author": "luoyuctl", "status": "CI_FAILURE", "reason": "CI checks are failing", "ci_status": "FAILURE", "review_decision": "REVIEW_REQUIRED", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Sep 17, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 3, "collisions": [{"colliding_pr": 63284, "risk_level": "MEDIUM", "collision_score": 0.164, "overlapping_files": ["vllm/utils/flashinfer.py"]}]}, {"number": 64620, "title": "[MoE] Load fused expert weights with one weight_loader call per shard", "url": "https://github.com/vllm-project/vllm/pull/64620", "author": "emmericp", "status": "CI_FAILURE", "reason": "CI checks are failing", "ci_status": "FAILURE", "review_decision": "REVIEW_REQUIRED", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Oct 30, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 3, "collisions": []}, {"number": 65402, "title": "[Bugfix][MRv1][Spec Decode] Count NaNs in logits per request, not per logits row", "url": "https://github.com/vllm-project/vllm/pull/65402", "author": "DemisEom", "status": "CI_FAILURE", "reason": "CI checks are failing", "ci_status": "FAILURE", "review_decision": "REVIEW_REQUIRED", "mergeable": "MERGEABLE", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Nov 03, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 2, "collisions": [{"colliding_pr": 64624, "risk_level": "MEDIUM", "collision_score": 0.242, "overlapping_files": ["tests/v1/worker/test_gpu_model_runner.py"]}, {"colliding_pr": 65395, "risk_level": "MEDIUM", "collision_score": 0.216, "overlapping_files": ["vllm/v1/worker/gpu_model_runner.py"]}]}, {"number": 58426, "title": "[Feature][Core] Add native SynthID-Text watermarking", "url": "https://github.com/vllm-project/vllm/pull/58426", "author": "sebfelix", "status": "CI_FAILURE", "reason": "CI checks are failing", "ci_status": "FAILURE", "review_decision": "REVIEW_REQUIRED", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Sep 23, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 19, "collisions": [{"colliding_pr": 56859, "risk_level": "CRITICAL", "collision_score": 0.7, "overlapping_files": ["docs/features/watermarking.md", "tests/watermarking/golden_candidates.py", "tests/watermarking/test_watermarking.py", "tests/watermarking/test_watermarking_e2e.py", "tests/watermarking/watermarking_goldens.json", "vllm/config/vllm.py", "vllm/config/watermarking.py", "vllm/v1/watermarking/__init__.py", "vllm/v1/watermarking/factory.py", "vllm/v1/watermarking/gumbel.py", "vllm/v1/watermarking/watermarker.py"]}, {"colliding_pr": 51156, "risk_level": "MEDIUM", "collision_score": 0.144, "overlapping_files": ["tests/test_config.py"]}]}, {"number": 64621, "title": "[Perf][GDN] Use FlashInfer's regular prefill route for short batches", "url": "https://github.com/vllm-project/vllm/pull/64621", "author": "emmericp", "status": "READY_TO_MERGE", "reason": "Approved, waiting for CI completion", "ci_status": "PENDING", "review_decision": "APPROVED", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Oct 30, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 1, "collisions": [{"colliding_pr": 63284, "risk_level": "CRITICAL", "collision_score": 0.52, "overlapping_files": ["vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py"]}, {"colliding_pr": 61952, "risk_level": "CRITICAL", "collision_score": 0.433, "overlapping_files": ["vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py"]}, {"colliding_pr": 56307, "risk_level": "HIGH", "collision_score": 0.31, "overlapping_files": ["vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py"]}]}, {"number": 65400, "title": "[Recipe] Kimi-K3, MiniMax-M3.1-Flash: add Rubin VR200 support", "url": "https://github.com/vllm-project/vllm/pull/65400", "author": "esmeetu", "status": "WAITING_REVIEW", "reason": "Awaiting maintainer review", "ci_status": "PENDING", "review_decision": "REVIEW_REQUIRED", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Nov 03, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 2, "collisions": []}, {"number": 65143, "title": "[Metrics][Quantization] Let quantization configs report weight bytes for MFU", "url": "https://github.com/vllm-project/vllm/pull/65143", "author": "varad-more", "status": "CI_FAILURE", "reason": "CI checks are failing", "ci_status": "FAILURE", "review_decision": "REVIEW_REQUIRED", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Nov 02, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 4, "collisions": [{"colliding_pr": 65398, "risk_level": "LOW", "collision_score": 0.045, "overlapping_files": ["vllm/model_executor/layers/quantization/base_config.py"]}]}, {"number": 63284, "title": "[Kernel] Separate what the GDN prefill selector can run from what it prefers", "url": "https://github.com/vllm-project/vllm/pull/63284", "author": "lesj0610", "status": "WAITING_REVIEW", "reason": "Awaiting maintainer review", "ci_status": "SUCCESS", "review_decision": "REVIEW_REQUIRED", "mergeable": "MERGEABLE", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Oct 23, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 5, "collisions": [{"colliding_pr": 64621, "risk_level": "CRITICAL", "collision_score": 0.52, "overlapping_files": ["vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py"]}, {"colliding_pr": 56307, "risk_level": "CRITICAL", "collision_score": 0.475, "overlapping_files": ["vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py", "vllm/v1/attention/backends/gdn_attn.py"]}, {"colliding_pr": 61952, "risk_level": "CRITICAL", "collision_score": 0.457, "overlapping_files": ["vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py", "vllm/v1/attention/backends/gdn_attn.py"]}, {"colliding_pr": 57292, "risk_level": "MEDIUM", "collision_score": 0.164, "overlapping_files": ["vllm/utils/flashinfer.py"]}]}, {"number": 56307, "title": "[ROCm][Kernel] New \"hip\" GDN backend for gfx1151", "url": "https://github.com/vllm-project/vllm/pull/56307", "author": "roberteg16", "status": "CI_FAILURE", "reason": "CI checks are failing", "ci_status": "FAILURE", "review_decision": "APPROVED", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Sep 10, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 13, "collisions": [{"colliding_pr": 63284, "risk_level": "CRITICAL", "collision_score": 0.475, "overlapping_files": ["vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py", "vllm/v1/attention/backends/gdn_attn.py"]}, {"colliding_pr": 61952, "risk_level": "CRITICAL", "collision_score": 0.441, "overlapping_files": ["vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py", "vllm/v1/attention/backends/gdn_attn.py"]}, {"colliding_pr": 64621, "risk_level": "HIGH", "collision_score": 0.31, "overlapping_files": ["vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py"]}]}, {"number": 64522, "title": "[CPU] Warm up the remaining sampling kernels before serving", "url": "https://github.com/vllm-project/vllm/pull/64522", "author": "ganeshr10", "status": "WAITING_REVIEW", "reason": "Awaiting maintainer review", "ci_status": "SUCCESS", "review_decision": "NONE", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Oct 29, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 8, "collisions": []}, {"number": 56859, "title": "[watermarking] Add SBW (Stateless Bernoulli Watermarking) algorithm", "url": "https://github.com/vllm-project/vllm/pull/56859", "author": "si-mon-jinn", "status": "CI_FAILURE", "reason": "CI checks are failing", "ci_status": "FAILURE", "review_decision": "REVIEW_REQUIRED", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Sep 14, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 14, "collisions": [{"colliding_pr": 58426, "risk_level": "CRITICAL", "collision_score": 0.7, "overlapping_files": ["docs/features/watermarking.md", "tests/watermarking/golden_candidates.py", "tests/watermarking/test_watermarking.py", "tests/watermarking/test_watermarking_e2e.py", "tests/watermarking/watermarking_goldens.json", "vllm/config/vllm.py", "vllm/config/watermarking.py", "vllm/v1/watermarking/__init__.py", "vllm/v1/watermarking/factory.py", "vllm/v1/watermarking/gumbel.py", "vllm/v1/watermarking/watermarker.py"]}]}, {"number": 65395, "title": "[Perf][Attention] Cache FlexAttention K/V cache views per tensor", "url": "https://github.com/vllm-project/vllm/pull/65395", "author": "selimfedakar", "status": "CI_FAILURE", "reason": "CI checks are failing", "ci_status": "FAILURE", "review_decision": "REVIEW_REQUIRED", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Nov 03, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 4, "collisions": [{"colliding_pr": 65402, "risk_level": "MEDIUM", "collision_score": 0.216, "overlapping_files": ["vllm/v1/worker/gpu_model_runner.py"]}]}, {"number": 62933, "title": "[KV Offload] Mirror CPU offload region slots across nodes", "url": "https://github.com/vllm-project/vllm/pull/62933", "author": "javieratomic", "status": "CI_FAILURE", "reason": "CI checks are failing", "ci_status": "FAILURE", "review_decision": "REVIEW_REQUIRED", "mergeable": "MERGEABLE", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Oct 21, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 18, "collisions": []}, {"number": 65399, "title": "[Bugfix][Scheduler] Respect disabled chunked prefill for multimodal requests", "url": "https://github.com/vllm-project/vllm/pull/65399", "author": "jzakrzew", "status": "WAITING_REVIEW", "reason": "Awaiting maintainer review", "ci_status": "PENDING", "review_decision": "REVIEW_REQUIRED", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Nov 03, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 4, "collisions": [{"colliding_pr": 64927, "risk_level": "CRITICAL", "collision_score": 0.64, "overlapping_files": ["tests/v1/core/test_scheduler.py", "vllm/v1/core/sched/scheduler.py"]}, {"colliding_pr": 52244, "risk_level": "MEDIUM", "collision_score": 0.123, "overlapping_files": ["vllm/v1/core/sched/scheduler.py"]}]}, {"number": 65394, "title": "[Bugfix][Quantization] Honor the activation scheme in MXFP8 linear kernel selection", "url": "https://github.com/vllm-project/vllm/pull/65394", "author": "selimfedakar", "status": "CI_FAILURE", "reason": "CI checks are failing", "ci_status": "FAILURE", "review_decision": "REVIEW_REQUIRED", "mergeable": "MERGEABLE", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Nov 03, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 7, "collisions": []}, {"number": 62093, "title": "[ROCm] do not blindly pick gpu 0 for asic info, consider *_VISIBLE_DEVICES", "url": "https://github.com/vllm-project/vllm/pull/62093", "author": "Kezii", "status": "CI_FAILURE", "reason": "CI checks are failing", "ci_status": "FAILURE", "review_decision": "REVIEW_REQUIRED", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Oct 16, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 1, "collisions": [{"colliding_pr": 65398, "risk_level": "LOW", "collision_score": 0.057, "overlapping_files": ["vllm/platforms/rocm.py"]}]}, {"number": 64560, "title": "[ROCm][Perf][MLA] Fuse the decode W_UK absorb, q concat + fp8 quant and head pad via AITER", "url": "https://github.com/vllm-project/vllm/pull/64560", "author": "lucas-santos-amd", "status": "DRAFT", "reason": "Marked as draft / work in progress", "ci_status": "FAILURE", "review_decision": "REVIEW_REQUIRED", "mergeable": "UNKNOWN", "is_draft": true, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Oct 29, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 5, "collisions": [{"colliding_pr": 65403, "risk_level": "CRITICAL", "collision_score": 0.455, "overlapping_files": ["tests/v1/attention/test_mla_backends.py", "vllm/model_executor/layers/attention/mla_attention.py"]}, {"colliding_pr": 63956, "risk_level": "HIGH", "collision_score": 0.214, "overlapping_files": ["vllm/model_executor/layers/attention/mla_attention.py"]}, {"colliding_pr": 65305, "risk_level": "LOW", "collision_score": 0.043, "overlapping_files": ["vllm/v1/attention/backend.py"]}]}, {"number": 63874, "title": "[Bugfix][Distributed] Release FlashInfer one-sided workspaces on teardown", "url": "https://github.com/vllm-project/vllm/pull/63874", "author": "WoosukKwon", "status": "WAITING_REVIEW", "reason": "Awaiting maintainer review", "ci_status": "SUCCESS", "review_decision": "REVIEW_REQUIRED", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Oct 27, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 3, "collisions": []}, {"number": 64765, "title": "[Misc] Use the b12x package shipped with flashinfer-python", "url": "https://github.com/vllm-project/vllm/pull/64765", "author": "stecasta", "status": "WAITING_REVIEW", "reason": "Awaiting maintainer review", "ci_status": "SUCCESS", "review_decision": "NONE", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Oct 30, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 12, "collisions": [{"colliding_pr": 59418, "risk_level": "LOW", "collision_score": 0.043, "overlapping_files": [".buildkite/test_areas/kernels.yaml"]}]}, {"number": 55993, "title": "[Examples] Fix ghost demo.py Usage in offline LLM examples", "url": "https://github.com/vllm-project/vllm/pull/55993", "author": "imitater-dou", "status": "CI_FAILURE", "reason": "CI checks are failing", "ci_status": "FAILURE", "review_decision": "REVIEW_REQUIRED", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Sep 09, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 2, "collisions": []}, {"number": 63909, "title": "[Bugfix][Spec Decode] Propagate dictionary hf-overrides to speculative draft models", "url": "https://github.com/vllm-project/vllm/pull/63909", "author": "cnsiva", "status": "CI_FAILURE", "reason": "CI checks are failing", "ci_status": "FAILURE", "review_decision": "REVIEW_REQUIRED", "mergeable": "MERGEABLE", "is_draft": false, "staleness_days": 0.1, "updated_at_str": "Nov 03, 2026", "created_at_str": "Oct 27, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 3, "collisions": []}, {"number": 65343, "title": "[Bugfix][Core] Bound local RPC ring-slot wait by deadline", "url": "https://github.com/vllm-project/vllm/pull/65343", "author": "uzunenes", "status": "CI_FAILURE", "reason": "CI checks are failing", "ci_status": "FAILURE", "review_decision": "REVIEW_REQUIRED", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.1, "updated_at_str": "Nov 03, 2026", "created_at_str": "Nov 03, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 4, "collisions": []}, {"number": 63676, "title": "[Bugfix][ROCm] Keep extend context when model runner v2 reorders the batch", "url": "https://github.com/vllm-project/vllm/pull/63676", "author": "tjtanaa", "status": "BLOCKED_BY_DEP", "reason": "Blocked on open dependency: #63675", "ci_status": "FAILURE", "review_decision": "NONE", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.1, "updated_at_str": "Nov 03, 2026", "created_at_str": "Oct 26, 2026", "blocked_by": [63675], "blocks": [], "files_changed_count": 25, "collisions": [{"colliding_pr": 61952, "risk_level": "MEDIUM", "collision_score": 0.068, "overlapping_files": ["vllm/v1/attention/backends/utils.py"]}]}, {"number": 62729, "title": "[Bugfix] Honor add_generation_prompt and continue_final_message in the DeepSeek V4.1 tokenizer", "url": "https://github.com/vllm-project/vllm/pull/62729", "author": "JohnZhao01", "status": "WAITING_REVIEW", "reason": "Awaiting maintainer review", "ci_status": "SUCCESS", "review_decision": "REVIEW_REQUIRED", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.1, "updated_at_str": "Nov 03, 2026", "created_at_str": "Oct 20, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 5, "collisions": []}], "hotspots": [{"path": "vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py", "open_pr_count": 4, "pr_numbers": [56307, 61952, 63284, 64621], "total_churn": 606, "min_idle_days": 0.0, "active_prs_count": 4}, {"path": "vllm/v1/attention/backends/gdn_attn.py", "open_pr_count": 3, "pr_numbers": [56307, 61952, 63284], "total_churn": 452, "min_idle_days": 0.0, "active_prs_count": 3}, {"path": "vllm/model_executor/layers/attention/mla_attention.py", "open_pr_count": 3, "pr_numbers": [63956, 64560, 65403], "total_churn": 122, "min_idle_days": 0.0, "active_prs_count": 3}, {"path": "vllm/v1/core/sched/scheduler.py", "open_pr_count": 3, "pr_numbers": [52244, 64927, 65399], "total_churn": 69, "min_idle_days": 0.0, "active_prs_count": 3}, {"path": "tests/watermarking/watermarking_goldens.json", "open_pr_count": 2, "pr_numbers": [56859, 58426], "total_churn": 5447, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "tests/kernels/attention/test_flashmla_sparse.py", "open_pr_count": 2, "pr_numbers": [59418, 62941], "total_churn": 384, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/models/deepseek_v41/nvidia/flashmla.py", "open_pr_count": 2, "pr_numbers": [59418, 62941], "total_churn": 185, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/v1/attention/backends/mla/indexer.py", "open_pr_count": 2, "pr_numbers": [63956, 65305], "total_churn": 184, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "tests/v1/core/test_scheduler.py", "open_pr_count": 2, "pr_numbers": [64927, 65399], "total_churn": 166, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/model_executor/layers/attention/sparse_mla_attention.py", "open_pr_count": 2, "pr_numbers": [63956, 65403], "total_churn": 158, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "tests/v1/attention/test_mla_backends.py", "open_pr_count": 2, "pr_numbers": [64560, 65403], "total_churn": 137, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/model_executor/layers/sparse_attn_indexer.py", "open_pr_count": 2, "pr_numbers": [63956, 65305], "total_churn": 122, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "tests/watermarking/golden_candidates.py", "open_pr_count": 2, "pr_numbers": [56859, 58426], "total_churn": 121, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "docs/features/watermarking.md", "open_pr_count": 2, "pr_numbers": [56859, 58426], "total_churn": 113, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "tests/watermarking/test_watermarking_e2e.py", "open_pr_count": 2, "pr_numbers": [56859, 58426], "total_churn": 74, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "tests/v1/attention/test_sparse_mla_backends.py", "open_pr_count": 2, "pr_numbers": [63956, 65403], "total_churn": 59, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "tests/test_config.py", "open_pr_count": 2, "pr_numbers": [51156, 58426], "total_churn": 57, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/config/watermarking.py", "open_pr_count": 2, "pr_numbers": [56859, 58426], "total_churn": 51, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/v1/worker/gpu_model_runner.py", "open_pr_count": 2, "pr_numbers": [65395, 65402], "total_churn": 48, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "tests/v1/worker/test_gpu_model_runner.py", "open_pr_count": 2, "pr_numbers": [64624, 65402], "total_churn": 46, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/config/attention.py", "open_pr_count": 2, "pr_numbers": [63956, 65403], "total_churn": 42, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/models/glm5next/common/attention.py", "open_pr_count": 2, "pr_numbers": [63956, 65403], "total_churn": 42, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/utils/flashinfer.py", "open_pr_count": 2, "pr_numbers": [57292, 63284], "total_churn": 39, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/v1/attention/backends/mla/sparse_swa.py", "open_pr_count": 2, "pr_numbers": [62941, 65305], "total_churn": 33, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/v1/attention/backends/utils.py", "open_pr_count": 2, "pr_numbers": [61952, 63676], "total_churn": 27, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/envs.py", "open_pr_count": 2, "pr_numbers": [62941, 64927], "total_churn": 26, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/v1/watermarking/watermarker.py", "open_pr_count": 2, "pr_numbers": [56859, 58426], "total_churn": 24, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "tests/watermarking/test_watermarking.py", "open_pr_count": 2, "pr_numbers": [56859, 58426], "total_churn": 19, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/models/glm5next/common/model.py", "open_pr_count": 2, "pr_numbers": [63956, 65403], "total_churn": 18, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/v1/watermarking/factory.py", "open_pr_count": 2, "pr_numbers": [56859, 58426], "total_churn": 17, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/platforms/rocm.py", "open_pr_count": 2, "pr_numbers": [62093, 65398], "total_churn": 14, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/v1/watermarking/gumbel.py", "open_pr_count": 2, "pr_numbers": [56859, 58426], "total_churn": 14, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/config/vllm.py", "open_pr_count": 2, "pr_numbers": [56859, 58426], "total_churn": 11, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/model_executor/layers/quantization/base_config.py", "open_pr_count": 2, "pr_numbers": [65143, 65398], "total_churn": 10, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/v1/attention/backend.py", "open_pr_count": 2, "pr_numbers": [64560, 65305], "total_churn": 10, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/v1/watermarking/__init__.py", "open_pr_count": 2, "pr_numbers": [56859, 58426], "total_churn": 9, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": ".buildkite/test_areas/kernels.yaml", "open_pr_count": 2, "pr_numbers": [59418, 64765], "total_churn": 3, "min_idle_days": 0.0, "active_prs_count": 2}], "collisions": [{"pr_a": 58426, "pr_b": 56859, "overlapping_files": ["docs/features/watermarking.md", "tests/watermarking/golden_candidates.py", "tests/watermarking/test_watermarking.py", "tests/watermarking/test_watermarking_e2e.py", "tests/watermarking/watermarking_goldens.json", "vllm/config/vllm.py", "vllm/config/watermarking.py", "vllm/v1/watermarking/__init__.py", "vllm/v1/watermarking/factory.py", "vllm/v1/watermarking/gumbel.py", "vllm/v1/watermarking/watermarker.py"], "collision_score": 0.7, "risk_level": "CRITICAL", "shared_churn": 5900, "pr_a_title": "[Feature][Core] Add native SynthID-Text watermarking", "pr_a_author": "sebfelix", "pr_a_idle_days": 0.0, "pr_b_title": "[watermarking] Add SBW (Stateless Bernoulli Watermarking) algorithm", "pr_b_author": "si-mon-jinn", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 64927, "pr_b": 65399, "overlapping_files": ["tests/v1/core/test_scheduler.py", "vllm/v1/core/sched/scheduler.py"], "collision_score": 0.64, "risk_level": "CRITICAL", "shared_churn": 222, "pr_a_title": "[Core][Scheduler] Add an opt-in time-bounded prefill hold", "pr_a_author": "vorapolsiloai", "pr_a_idle_days": 0.0, "pr_b_title": "[Bugfix][Scheduler] Respect disabled chunked prefill for multimodal requests", "pr_b_author": "jzakrzew", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 62941, "pr_b": 59418, "overlapping_files": ["tests/kernels/attention/test_flashmla_sparse.py", "vllm/models/deepseek_v41/nvidia/flashmla.py"], "collision_score": 0.533, "risk_level": "CRITICAL", "shared_churn": 569, "pr_a_title": "[Perf][DSv4.1] Pack DSpark verify positions into one FlashMLA head tile on SM90", "pr_a_author": "luoyuctl", "pr_a_idle_days": 0.0, "pr_b_title": "[Perf][DSv4.1] Small-head sparse decode on SM90", "pr_b_author": "luoyuctl", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 64621, "pr_b": 63284, "overlapping_files": ["vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py"], "collision_score": 0.52, "risk_level": "CRITICAL", "shared_churn": 211, "pr_a_title": "[Perf][GDN] Use FlashInfer's regular prefill route for short batches", "pr_a_author": "emmericp", "pr_a_idle_days": 0.0, "pr_b_title": "[Kernel] Separate what the GDN prefill selector can run from what it prefers", "pr_b_author": "lesj0610", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 65403, "pr_b": 63956, "overlapping_files": ["tests/v1/attention/test_sparse_mla_backends.py", "vllm/config/attention.py", "vllm/model_executor/layers/attention/mla_attention.py", "vllm/model_executor/layers/attention/sparse_mla_attention.py", "vllm/models/glm5next/common/attention.py", "vllm/models/glm5next/common/model.py"], "collision_score": 0.512, "risk_level": "CRITICAL", "shared_churn": 388, "pr_a_title": "[Perf][Sparse MLA][GLM-5.3] Index-group workspace savings, indexer gate GEMM, opt-in masked-MHA prefill on quantized KV", "pr_a_author": "gaby", "pr_a_idle_days": 0.0, "pr_b_title": "[Perf][DSA] Token-sharded sparse-MLA prefill under TP; remove indexer row sharding", "pr_b_author": "ZJY0516", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 63284, "pr_b": 56307, "overlapping_files": ["vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py", "vllm/v1/attention/backends/gdn_attn.py"], "collision_score": 0.475, "risk_level": "CRITICAL", "shared_churn": 340, "pr_a_title": "[Kernel] Separate what the GDN prefill selector can run from what it prefers", "pr_a_author": "lesj0610", "pr_a_idle_days": 0.0, "pr_b_title": "[ROCm][Kernel] New \"hip\" GDN backend for gfx1151", "pr_b_author": "roberteg16", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 61952, "pr_b": 63284, "overlapping_files": ["vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py", "vllm/v1/attention/backends/gdn_attn.py"], "collision_score": 0.457, "risk_level": "CRITICAL", "shared_churn": 924, "pr_a_title": "[Perf][GDN] Capture the GDN core in breakable CUDA graphs of mixed batches (CUDA graph 2/2)", "pr_a_author": "kimseunghyun-kr", "pr_a_idle_days": 0.0, "pr_b_title": "[Kernel] Separate what the GDN prefill selector can run from what it prefers", "pr_b_author": "lesj0610", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 65403, "pr_b": 64560, "overlapping_files": ["tests/v1/attention/test_mla_backends.py", "vllm/model_executor/layers/attention/mla_attention.py"], "collision_score": 0.455, "risk_level": "CRITICAL", "shared_churn": 218, "pr_a_title": "[Perf][Sparse MLA][GLM-5.3] Index-group workspace savings, indexer gate GEMM, opt-in masked-MHA prefill on quantized KV", "pr_a_author": "gaby", "pr_a_idle_days": 0.0, "pr_b_title": "[ROCm][Perf][MLA] Fuse the decode W_UK absorb, q concat + fp8 quant and head pad via AITER", "pr_b_author": "lucas-santos-amd", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 61952, "pr_b": 56307, "overlapping_files": ["vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py", "vllm/v1/attention/backends/gdn_attn.py"], "collision_score": 0.441, "risk_level": "CRITICAL", "shared_churn": 830, "pr_a_title": "[Perf][GDN] Capture the GDN core in breakable CUDA graphs of mixed batches (CUDA graph 2/2)", "pr_a_author": "kimseunghyun-kr", "pr_a_idle_days": 0.0, "pr_b_title": "[ROCm][Kernel] New \"hip\" GDN backend for gfx1151", "pr_b_author": "roberteg16", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 61952, "pr_b": 64621, "overlapping_files": ["vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py"], "collision_score": 0.433, "risk_level": "CRITICAL", "shared_churn": 285, "pr_a_title": "[Perf][GDN] Capture the GDN core in breakable CUDA graphs of mixed batches (CUDA graph 2/2)", "pr_a_author": "kimseunghyun-kr", "pr_a_idle_days": 0.0, "pr_b_title": "[Perf][GDN] Use FlashInfer's regular prefill route for short batches", "pr_b_author": "emmericp", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 65305, "pr_b": 63956, "overlapping_files": ["vllm/model_executor/layers/sparse_attn_indexer.py", "vllm/v1/attention/backends/mla/indexer.py"], "collision_score": 0.431, "risk_level": "CRITICAL", "shared_churn": 306, "pr_a_title": "[Feature][PCP] Support DeepSeek V4 with FlashMLA on NVIDIA", "pr_a_author": "pisceskkk", "pr_a_idle_days": 0.0, "pr_b_title": "[Perf][DSA] Token-sharded sparse-MLA prefill under TP; remove indexer row sharding", "pr_b_author": "ZJY0516", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 64621, "pr_b": 56307, "overlapping_files": ["vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py"], "collision_score": 0.31, "risk_level": "HIGH", "shared_churn": 132, "pr_a_title": "[Perf][GDN] Use FlashInfer's regular prefill route for short batches", "pr_a_author": "emmericp", "pr_a_idle_days": 0.0, "pr_b_title": "[ROCm][Kernel] New \"hip\" GDN backend for gfx1151", "pr_b_author": "roberteg16", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 63956, "pr_b": 64560, "overlapping_files": ["vllm/model_executor/layers/attention/mla_attention.py"], "collision_score": 0.214, "risk_level": "HIGH", "shared_churn": 94, "pr_a_title": "[Perf][DSA] Token-sharded sparse-MLA prefill under TP; remove indexer row sharding", "pr_a_author": "ZJY0516", "pr_a_idle_days": 0.0, "pr_b_title": "[ROCm][Perf][MLA] Fuse the decode W_UK absorb, q concat + fp8 quant and head pad via AITER", "pr_b_author": "lucas-santos-amd", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 64624, "pr_b": 65402, "overlapping_files": ["tests/v1/worker/test_gpu_model_runner.py"], "collision_score": 0.242, "risk_level": "MEDIUM", "shared_churn": 46, "pr_a_title": "[Hybrid] Round the attention block size up to prefix_match_unit", "pr_a_author": "emmericp", "pr_a_idle_days": 0.0, "pr_b_title": "[Bugfix][MRv1][Spec Decode] Count NaNs in logits per request, not per logits row", "pr_b_author": "DemisEom", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 65402, "pr_b": 65395, "overlapping_files": ["vllm/v1/worker/gpu_model_runner.py"], "collision_score": 0.216, "risk_level": "MEDIUM", "shared_churn": 48, "pr_a_title": "[Bugfix][MRv1][Spec Decode] Count NaNs in logits per request, not per logits row", "pr_a_author": "DemisEom", "pr_a_idle_days": 0.0, "pr_b_title": "[Perf][Attention] Cache FlexAttention K/V cache views per tensor", "pr_b_author": "selimfedakar", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 52244, "pr_b": 64927, "overlapping_files": ["vllm/v1/core/sched/scheduler.py"], "collision_score": 0.183, "risk_level": "MEDIUM", "shared_churn": 54, "pr_a_title": "[Bugfix][V1] Restore hybrid GDN prefix-cache hits under MTP spec decoding", "pr_a_author": "Y-aang", "pr_a_idle_days": 0.0, "pr_b_title": "[Core][Scheduler] Add an opt-in time-bounded prefill hold", "pr_b_author": "vorapolsiloai", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 57292, "pr_b": 63284, "overlapping_files": ["vllm/utils/flashinfer.py"], "collision_score": 0.164, "risk_level": "MEDIUM", "shared_churn": 39, "pr_a_title": "[Bugfix][DSv4.1] Fail fast on SM120 when FlashInfer lacks runtime page sizes", "pr_a_author": "luoyuctl", "pr_a_idle_days": 0.0, "pr_b_title": "[Kernel] Separate what the GDN prefill selector can run from what it prefers", "pr_b_author": "lesj0610", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 51156, "pr_b": 58426, "overlapping_files": ["tests/test_config.py"], "collision_score": 0.144, "risk_level": "MEDIUM", "shared_churn": 57, "pr_a_title": "[Bugfix][Spec Decode] Bound draft max_model_len by the target before logging", "pr_a_author": "adityasingh2400", "pr_a_idle_days": 0.0, "pr_b_title": "[Feature][Core] Add native SynthID-Text watermarking", "pr_b_author": "sebfelix", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 64927, "pr_b": 62941, "overlapping_files": ["vllm/envs.py"], "collision_score": 0.127, "risk_level": "MEDIUM", "shared_churn": 26, "pr_a_title": "[Core][Scheduler] Add an opt-in time-bounded prefill hold", "pr_a_author": "vorapolsiloai", "pr_a_idle_days": 0.0, "pr_b_title": "[Perf][DSv4.1] Pack DSpark verify positions into one FlashMLA head tile on SM90", "pr_b_author": "luoyuctl", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 52244, "pr_b": 65399, "overlapping_files": ["vllm/v1/core/sched/scheduler.py"], "collision_score": 0.123, "risk_level": "MEDIUM", "shared_churn": 28, "pr_a_title": "[Bugfix][V1] Restore hybrid GDN prefix-cache hits under MTP spec decoding", "pr_a_author": "Y-aang", "pr_a_idle_days": 0.0, "pr_b_title": "[Bugfix][Scheduler] Respect disabled chunked prefill for multimodal requests", "pr_b_author": "jzakrzew", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 65305, "pr_b": 62941, "overlapping_files": ["vllm/v1/attention/backends/mla/sparse_swa.py"], "collision_score": 0.088, "risk_level": "MEDIUM", "shared_churn": 33, "pr_a_title": "[Feature][PCP] Support DeepSeek V4 with FlashMLA on NVIDIA", "pr_a_author": "pisceskkk", "pr_a_idle_days": 0.0, "pr_b_title": "[Perf][DSv4.1] Pack DSpark verify positions into one FlashMLA head tile on SM90", "pr_b_author": "luoyuctl", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 61952, "pr_b": 63676, "overlapping_files": ["vllm/v1/attention/backends/utils.py"], "collision_score": 0.068, "risk_level": "MEDIUM", "shared_churn": 27, "pr_a_title": "[Perf][GDN] Capture the GDN core in breakable CUDA graphs of mixed batches (CUDA graph 2/2)", "pr_a_author": "kimseunghyun-kr", "pr_a_idle_days": 0.0, "pr_b_title": "[Bugfix][ROCm] Keep extend context when model runner v2 reorders the batch", "pr_b_author": "tjtanaa", "pr_b_idle_days": 0.1, "is_live_race": true}, {"pr_a": 65398, "pr_b": 62093, "overlapping_files": ["vllm/platforms/rocm.py"], "collision_score": 0.057, "risk_level": "LOW", "shared_churn": 14, "pr_a_title": "[Quantization] Add mxfp4_hadamard32_moe online quantization", "pr_a_author": "mgoin", "pr_a_idle_days": 0.0, "pr_b_title": "[ROCm] do not blindly pick gpu 0 for asic info, consider *_VISIBLE_DEVICES", "pr_b_author": "Kezii", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 65398, "pr_b": 65143, "overlapping_files": ["vllm/model_executor/layers/quantization/base_config.py"], "collision_score": 0.045, "risk_level": "LOW", "shared_churn": 10, "pr_a_title": "[Quantization] Add mxfp4_hadamard32_moe online quantization", "pr_a_author": "mgoin", "pr_a_idle_days": 0.0, "pr_b_title": "[Metrics][Quantization] Let quantization configs report weight bytes for MFU", "pr_b_author": "varad-more", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 65305, "pr_b": 64560, "overlapping_files": ["vllm/v1/attention/backend.py"], "collision_score": 0.043, "risk_level": "LOW", "shared_churn": 10, "pr_a_title": "[Feature][PCP] Support DeepSeek V4 with FlashMLA on NVIDIA", "pr_a_author": "pisceskkk", "pr_a_idle_days": 0.0, "pr_b_title": "[ROCm][Perf][MLA] Fuse the decode W_UK absorb, q concat + fp8 quant and head pad via AITER", "pr_b_author": "lucas-santos-amd", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 59418, "pr_b": 64765, "overlapping_files": [".buildkite/test_areas/kernels.yaml"], "collision_score": 0.043, "risk_level": "LOW", "shared_churn": 3, "pr_a_title": "[Perf][DSv4.1] Small-head sparse decode on SM90", "pr_a_author": "luoyuctl", "pr_a_idle_days": 0.0, "pr_b_title": "[Misc] Use the b12x package shipped with flashinfer-python", "pr_b_author": "stecasta", "pr_b_idle_days": 0.0, "is_live_race": true}], "chains": [[56606, 65398], [62750, 65398], [61779, 61952], [52838, 62933], [63675, 63676]]}; remove indexer row sharding", "url": "https://github.com/vllm-project/vllm/pull/63956", "author": "ZJY0516", "status": "WAITING_REVIEW", "reason": "Awaiting maintainer review", "ci_status": "SUCCESS", "review_decision": "NONE", "mergeable": "MERGEABLE", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Oct 27, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 19, "collisions": [{"colliding_pr": 65403, "risk_level": "CRITICAL", "collision_score": 0.512, "overlapping_files": ["tests/v1/attention/test_sparse_mla_backends.py", "vllm/config/attention.py", "vllm/model_executor/layers/attention/mla_attention.py", "vllm/model_executor/layers/attention/sparse_mla_attention.py", "vllm/models/glm5next/common/attention.py", "vllm/models/glm5next/common/model.py"]}, {"colliding_pr": 65305, "risk_level": "CRITICAL", "collision_score": 0.431, "overlapping_files": ["vllm/model_executor/layers/sparse_attn_indexer.py", "vllm/v1/attention/backends/mla/indexer.py"]}, {"colliding_pr": 64560, "risk_level": "HIGH", "collision_score": 0.214, "overlapping_files": ["vllm/model_executor/layers/attention/mla_attention.py"]}]}, {"number": 63086, "title": "[ROCm][Kimi-K3] Enable encoder graph capture for Kimi-K3 Vision Tower", "url": "https://github.com/vllm-project/vllm/pull/63086", "author": "samutamm", "status": "WAITING_REVIEW", "reason": "Awaiting maintainer review", "ci_status": "PENDING", "review_decision": "REVIEW_REQUIRED", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Oct 22, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 2, "collisions": []}, {"number": 64927, "title": "[Core][Scheduler] Add an opt-in time-bounded prefill hold", "url": "https://github.com/vllm-project/vllm/pull/64927", "author": "vorapolsiloai", "status": "DRAFT", "reason": "Marked as draft / work in progress", "ci_status": "FAILURE", "review_decision": "REVIEW_REQUIRED", "mergeable": "UNKNOWN", "is_draft": true, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Oct 31, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 3, "collisions": [{"colliding_pr": 65399, "risk_level": "CRITICAL", "collision_score": 0.64, "overlapping_files": ["tests/v1/core/test_scheduler.py", "vllm/v1/core/sched/scheduler.py"]}, {"colliding_pr": 52244, "risk_level": "MEDIUM", "collision_score": 0.183, "overlapping_files": ["vllm/v1/core/sched/scheduler.py"]}, {"colliding_pr": 62941, "risk_level": "MEDIUM", "collision_score": 0.127, "overlapping_files": ["vllm/envs.py"]}]}, {"number": 61952, "title": "[Perf][GDN] Capture the GDN core in breakable CUDA graphs of mixed batches (CUDA graph 2/2)", "url": "https://github.com/vllm-project/vllm/pull/61952", "author": "kimseunghyun-kr", "status": "BLOCKED_BY_DEP", "reason": "Blocked on open dependency: #61779", "ci_status": "SUCCESS", "review_decision": "REVIEW_REQUIRED", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Oct 16, 2026", "blocked_by": [61779], "blocks": [], "files_changed_count": 18, "collisions": [{"colliding_pr": 63284, "risk_level": "CRITICAL", "collision_score": 0.457, "overlapping_files": ["vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py", "vllm/v1/attention/backends/gdn_attn.py"]}, {"colliding_pr": 56307, "risk_level": "CRITICAL", "collision_score": 0.441, "overlapping_files": ["vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py", "vllm/v1/attention/backends/gdn_attn.py"]}, {"colliding_pr": 64621, "risk_level": "CRITICAL", "collision_score": 0.433, "overlapping_files": ["vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py"]}, {"colliding_pr": 63676, "risk_level": "MEDIUM", "collision_score": 0.068, "overlapping_files": ["vllm/v1/attention/backends/utils.py"]}]}, {"number": 51156, "title": "[Bugfix][Spec Decode] Bound draft max_model_len by the target before logging", "url": "https://github.com/vllm-project/vllm/pull/51156", "author": "adityasingh2400", "status": "CI_FAILURE", "reason": "CI checks are failing", "ci_status": "FAILURE", "review_decision": "REVIEW_REQUIRED", "mergeable": "MERGEABLE", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Aug 05, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 2, "collisions": [{"colliding_pr": 58426, "risk_level": "MEDIUM", "collision_score": 0.144, "overlapping_files": ["tests/test_config.py"]}]}, {"number": 43548, "title": "[Bugfix] Expand YAML config when passed as `--config=<path>`", "url": "https://github.com/vllm-project/vllm/pull/43548", "author": "adityasingh2400", "status": "CI_FAILURE", "reason": "CI checks are failing", "ci_status": "FAILURE", "review_decision": "REVIEW_REQUIRED", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "May 25, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 2, "collisions": []}, {"number": 56451, "title": "[ROCm][Spec Decode] Enable adaptive DSpark verification for MiniMax M3", "url": "https://github.com/vllm-project/vllm/pull/56451", "author": "olka-amd", "status": "WAITING_REVIEW", "reason": "Awaiting maintainer review", "ci_status": "PENDING", "review_decision": "REVIEW_REQUIRED", "mergeable": "MERGEABLE", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Sep 11, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 13, "collisions": []}, {"number": 65076, "title": "[KVConnector][Mooncake] Add per-GPU device names for MooncakeStoreConnector", "url": "https://github.com/vllm-project/vllm/pull/65076", "author": "whx-sjtu", "status": "READY_TO_MERGE", "reason": "Approved, waiting for CI completion", "ci_status": "PENDING", "review_decision": "APPROVED", "mergeable": "MERGEABLE", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Nov 02, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 4, "collisions": []}, {"number": 64624, "title": "[Hybrid] Round the attention block size up to prefix_match_unit", "url": "https://github.com/vllm-project/vllm/pull/64624", "author": "emmericp", "status": "CI_FAILURE", "reason": "CI checks are failing", "ci_status": "FAILURE", "review_decision": "REVIEW_REQUIRED", "mergeable": "MERGEABLE", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Oct 30, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 3, "collisions": [{"colliding_pr": 65402, "risk_level": "MEDIUM", "collision_score": 0.242, "overlapping_files": ["tests/v1/worker/test_gpu_model_runner.py"]}]}, {"number": 62941, "title": "[Perf][DSv4.1] Pack DSpark verify positions into one FlashMLA head tile on SM90", "url": "https://github.com/vllm-project/vllm/pull/62941", "author": "luoyuctl", "status": "DRAFT", "reason": "Marked as draft / work in progress", "ci_status": "FAILURE", "review_decision": "REVIEW_REQUIRED", "mergeable": "UNKNOWN", "is_draft": true, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Oct 21, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 6, "collisions": [{"colliding_pr": 59418, "risk_level": "CRITICAL", "collision_score": 0.533, "overlapping_files": ["tests/kernels/attention/test_flashmla_sparse.py", "vllm/models/deepseek_v41/nvidia/flashmla.py"]}, {"colliding_pr": 64927, "risk_level": "MEDIUM", "collision_score": 0.127, "overlapping_files": ["vllm/envs.py"]}, {"colliding_pr": 65305, "risk_level": "MEDIUM", "collision_score": 0.088, "overlapping_files": ["vllm/v1/attention/backends/mla/sparse_swa.py"]}]}, {"number": 59418, "title": "[Perf][DSv4.1] Small-head sparse decode on SM90", "url": "https://github.com/vllm-project/vllm/pull/59418", "author": "luoyuctl", "status": "WAITING_REVIEW", "reason": "Awaiting maintainer review", "ci_status": "SUCCESS", "review_decision": "NONE", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Sep 30, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 5, "collisions": [{"colliding_pr": 62941, "risk_level": "CRITICAL", "collision_score": 0.533, "overlapping_files": ["tests/kernels/attention/test_flashmla_sparse.py", "vllm/models/deepseek_v41/nvidia/flashmla.py"]}, {"colliding_pr": 64765, "risk_level": "LOW", "collision_score": 0.043, "overlapping_files": [".buildkite/test_areas/kernels.yaml"]}]}, {"number": 57292, "title": "[Bugfix][DSv4.1] Fail fast on SM120 when FlashInfer lacks runtime page sizes", "url": "https://github.com/vllm-project/vllm/pull/57292", "author": "luoyuctl", "status": "CI_FAILURE", "reason": "CI checks are failing", "ci_status": "FAILURE", "review_decision": "REVIEW_REQUIRED", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Sep 17, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 3, "collisions": [{"colliding_pr": 63284, "risk_level": "MEDIUM", "collision_score": 0.164, "overlapping_files": ["vllm/utils/flashinfer.py"]}]}, {"number": 64620, "title": "[MoE] Load fused expert weights with one weight_loader call per shard", "url": "https://github.com/vllm-project/vllm/pull/64620", "author": "emmericp", "status": "CI_FAILURE", "reason": "CI checks are failing", "ci_status": "FAILURE", "review_decision": "REVIEW_REQUIRED", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Oct 30, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 3, "collisions": []}, {"number": 65402, "title": "[Bugfix][MRv1][Spec Decode] Count NaNs in logits per request, not per logits row", "url": "https://github.com/vllm-project/vllm/pull/65402", "author": "DemisEom", "status": "CI_FAILURE", "reason": "CI checks are failing", "ci_status": "FAILURE", "review_decision": "REVIEW_REQUIRED", "mergeable": "MERGEABLE", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Nov 03, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 2, "collisions": [{"colliding_pr": 64624, "risk_level": "MEDIUM", "collision_score": 0.242, "overlapping_files": ["tests/v1/worker/test_gpu_model_runner.py"]}, {"colliding_pr": 65395, "risk_level": "MEDIUM", "collision_score": 0.216, "overlapping_files": ["vllm/v1/worker/gpu_model_runner.py"]}]}, {"number": 58426, "title": "[Feature][Core] Add native SynthID-Text watermarking", "url": "https://github.com/vllm-project/vllm/pull/58426", "author": "sebfelix", "status": "CI_FAILURE", "reason": "CI checks are failing", "ci_status": "FAILURE", "review_decision": "REVIEW_REQUIRED", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Sep 23, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 19, "collisions": [{"colliding_pr": 56859, "risk_level": "CRITICAL", "collision_score": 0.7, "overlapping_files": ["docs/features/watermarking.md", "tests/watermarking/golden_candidates.py", "tests/watermarking/test_watermarking.py", "tests/watermarking/test_watermarking_e2e.py", "tests/watermarking/watermarking_goldens.json", "vllm/config/vllm.py", "vllm/config/watermarking.py", "vllm/v1/watermarking/__init__.py", "vllm/v1/watermarking/factory.py", "vllm/v1/watermarking/gumbel.py", "vllm/v1/watermarking/watermarker.py"]}, {"colliding_pr": 51156, "risk_level": "MEDIUM", "collision_score": 0.144, "overlapping_files": ["tests/test_config.py"]}]}, {"number": 64621, "title": "[Perf][GDN] Use FlashInfer's regular prefill route for short batches", "url": "https://github.com/vllm-project/vllm/pull/64621", "author": "emmericp", "status": "READY_TO_MERGE", "reason": "Approved, waiting for CI completion", "ci_status": "PENDING", "review_decision": "APPROVED", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Oct 30, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 1, "collisions": [{"colliding_pr": 63284, "risk_level": "CRITICAL", "collision_score": 0.52, "overlapping_files": ["vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py"]}, {"colliding_pr": 61952, "risk_level": "CRITICAL", "collision_score": 0.433, "overlapping_files": ["vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py"]}, {"colliding_pr": 56307, "risk_level": "HIGH", "collision_score": 0.31, "overlapping_files": ["vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py"]}]}, {"number": 65400, "title": "[Recipe] Kimi-K3, MiniMax-M3.1-Flash: add Rubin VR200 support", "url": "https://github.com/vllm-project/vllm/pull/65400", "author": "esmeetu", "status": "WAITING_REVIEW", "reason": "Awaiting maintainer review", "ci_status": "PENDING", "review_decision": "REVIEW_REQUIRED", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Nov 03, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 2, "collisions": []}, {"number": 65143, "title": "[Metrics][Quantization] Let quantization configs report weight bytes for MFU", "url": "https://github.com/vllm-project/vllm/pull/65143", "author": "varad-more", "status": "CI_FAILURE", "reason": "CI checks are failing", "ci_status": "FAILURE", "review_decision": "REVIEW_REQUIRED", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Nov 02, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 4, "collisions": [{"colliding_pr": 65398, "risk_level": "LOW", "collision_score": 0.045, "overlapping_files": ["vllm/model_executor/layers/quantization/base_config.py"]}]}, {"number": 63284, "title": "[Kernel] Separate what the GDN prefill selector can run from what it prefers", "url": "https://github.com/vllm-project/vllm/pull/63284", "author": "lesj0610", "status": "WAITING_REVIEW", "reason": "Awaiting maintainer review", "ci_status": "SUCCESS", "review_decision": "REVIEW_REQUIRED", "mergeable": "MERGEABLE", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Oct 23, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 5, "collisions": [{"colliding_pr": 64621, "risk_level": "CRITICAL", "collision_score": 0.52, "overlapping_files": ["vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py"]}, {"colliding_pr": 56307, "risk_level": "CRITICAL", "collision_score": 0.475, "overlapping_files": ["vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py", "vllm/v1/attention/backends/gdn_attn.py"]}, {"colliding_pr": 61952, "risk_level": "CRITICAL", "collision_score": 0.457, "overlapping_files": ["vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py", "vllm/v1/attention/backends/gdn_attn.py"]}, {"colliding_pr": 57292, "risk_level": "MEDIUM", "collision_score": 0.164, "overlapping_files": ["vllm/utils/flashinfer.py"]}]}, {"number": 56307, "title": "[ROCm][Kernel] New \"hip\" GDN backend for gfx1151", "url": "https://github.com/vllm-project/vllm/pull/56307", "author": "roberteg16", "status": "CI_FAILURE", "reason": "CI checks are failing", "ci_status": "FAILURE", "review_decision": "APPROVED", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Sep 10, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 13, "collisions": [{"colliding_pr": 63284, "risk_level": "CRITICAL", "collision_score": 0.475, "overlapping_files": ["vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py", "vllm/v1/attention/backends/gdn_attn.py"]}, {"colliding_pr": 61952, "risk_level": "CRITICAL", "collision_score": 0.441, "overlapping_files": ["vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py", "vllm/v1/attention/backends/gdn_attn.py"]}, {"colliding_pr": 64621, "risk_level": "HIGH", "collision_score": 0.31, "overlapping_files": ["vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py"]}]}, {"number": 64522, "title": "[CPU] Warm up the remaining sampling kernels before serving", "url": "https://github.com/vllm-project/vllm/pull/64522", "author": "ganeshr10", "status": "WAITING_REVIEW", "reason": "Awaiting maintainer review", "ci_status": "SUCCESS", "review_decision": "NONE", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Oct 29, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 8, "collisions": []}, {"number": 56859, "title": "[watermarking] Add SBW (Stateless Bernoulli Watermarking) algorithm", "url": "https://github.com/vllm-project/vllm/pull/56859", "author": "si-mon-jinn", "status": "CI_FAILURE", "reason": "CI checks are failing", "ci_status": "FAILURE", "review_decision": "REVIEW_REQUIRED", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Sep 14, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 14, "collisions": [{"colliding_pr": 58426, "risk_level": "CRITICAL", "collision_score": 0.7, "overlapping_files": ["docs/features/watermarking.md", "tests/watermarking/golden_candidates.py", "tests/watermarking/test_watermarking.py", "tests/watermarking/test_watermarking_e2e.py", "tests/watermarking/watermarking_goldens.json", "vllm/config/vllm.py", "vllm/config/watermarking.py", "vllm/v1/watermarking/__init__.py", "vllm/v1/watermarking/factory.py", "vllm/v1/watermarking/gumbel.py", "vllm/v1/watermarking/watermarker.py"]}]}, {"number": 65395, "title": "[Perf][Attention] Cache FlexAttention K/V cache views per tensor", "url": "https://github.com/vllm-project/vllm/pull/65395", "author": "selimfedakar", "status": "CI_FAILURE", "reason": "CI checks are failing", "ci_status": "FAILURE", "review_decision": "REVIEW_REQUIRED", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Nov 03, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 4, "collisions": [{"colliding_pr": 65402, "risk_level": "MEDIUM", "collision_score": 0.216, "overlapping_files": ["vllm/v1/worker/gpu_model_runner.py"]}]}, {"number": 62933, "title": "[KV Offload] Mirror CPU offload region slots across nodes", "url": "https://github.com/vllm-project/vllm/pull/62933", "author": "javieratomic", "status": "CI_FAILURE", "reason": "CI checks are failing", "ci_status": "FAILURE", "review_decision": "REVIEW_REQUIRED", "mergeable": "MERGEABLE", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Oct 21, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 18, "collisions": []}, {"number": 65399, "title": "[Bugfix][Scheduler] Respect disabled chunked prefill for multimodal requests", "url": "https://github.com/vllm-project/vllm/pull/65399", "author": "jzakrzew", "status": "WAITING_REVIEW", "reason": "Awaiting maintainer review", "ci_status": "PENDING", "review_decision": "REVIEW_REQUIRED", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Nov 03, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 4, "collisions": [{"colliding_pr": 64927, "risk_level": "CRITICAL", "collision_score": 0.64, "overlapping_files": ["tests/v1/core/test_scheduler.py", "vllm/v1/core/sched/scheduler.py"]}, {"colliding_pr": 52244, "risk_level": "MEDIUM", "collision_score": 0.123, "overlapping_files": ["vllm/v1/core/sched/scheduler.py"]}]}, {"number": 65394, "title": "[Bugfix][Quantization] Honor the activation scheme in MXFP8 linear kernel selection", "url": "https://github.com/vllm-project/vllm/pull/65394", "author": "selimfedakar", "status": "CI_FAILURE", "reason": "CI checks are failing", "ci_status": "FAILURE", "review_decision": "REVIEW_REQUIRED", "mergeable": "MERGEABLE", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Nov 03, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 7, "collisions": []}, {"number": 62093, "title": "[ROCm] do not blindly pick gpu 0 for asic info, consider *_VISIBLE_DEVICES", "url": "https://github.com/vllm-project/vllm/pull/62093", "author": "Kezii", "status": "CI_FAILURE", "reason": "CI checks are failing", "ci_status": "FAILURE", "review_decision": "REVIEW_REQUIRED", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Oct 16, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 1, "collisions": [{"colliding_pr": 65398, "risk_level": "LOW", "collision_score": 0.057, "overlapping_files": ["vllm/platforms/rocm.py"]}]}, {"number": 64560, "title": "[ROCm][Perf][MLA] Fuse the decode W_UK absorb, q concat + fp8 quant and head pad via AITER", "url": "https://github.com/vllm-project/vllm/pull/64560", "author": "lucas-santos-amd", "status": "DRAFT", "reason": "Marked as draft / work in progress", "ci_status": "FAILURE", "review_decision": "REVIEW_REQUIRED", "mergeable": "UNKNOWN", "is_draft": true, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Oct 29, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 5, "collisions": [{"colliding_pr": 65403, "risk_level": "CRITICAL", "collision_score": 0.455, "overlapping_files": ["tests/v1/attention/test_mla_backends.py", "vllm/model_executor/layers/attention/mla_attention.py"]}, {"colliding_pr": 63956, "risk_level": "HIGH", "collision_score": 0.214, "overlapping_files": ["vllm/model_executor/layers/attention/mla_attention.py"]}, {"colliding_pr": 65305, "risk_level": "LOW", "collision_score": 0.043, "overlapping_files": ["vllm/v1/attention/backend.py"]}]}, {"number": 63874, "title": "[Bugfix][Distributed] Release FlashInfer one-sided workspaces on teardown", "url": "https://github.com/vllm-project/vllm/pull/63874", "author": "WoosukKwon", "status": "WAITING_REVIEW", "reason": "Awaiting maintainer review", "ci_status": "SUCCESS", "review_decision": "REVIEW_REQUIRED", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Oct 27, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 3, "collisions": []}, {"number": 64765, "title": "[Misc] Use the b12x package shipped with flashinfer-python", "url": "https://github.com/vllm-project/vllm/pull/64765", "author": "stecasta", "status": "WAITING_REVIEW", "reason": "Awaiting maintainer review", "ci_status": "SUCCESS", "review_decision": "NONE", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Oct 30, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 12, "collisions": [{"colliding_pr": 59418, "risk_level": "LOW", "collision_score": 0.043, "overlapping_files": [".buildkite/test_areas/kernels.yaml"]}]}, {"number": 55993, "title": "[Examples] Fix ghost demo.py Usage in offline LLM examples", "url": "https://github.com/vllm-project/vllm/pull/55993", "author": "imitater-dou", "status": "CI_FAILURE", "reason": "CI checks are failing", "ci_status": "FAILURE", "review_decision": "REVIEW_REQUIRED", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Sep 09, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 2, "collisions": []}, {"number": 63909, "title": "[Bugfix][Spec Decode] Propagate dictionary hf-overrides to speculative draft models", "url": "https://github.com/vllm-project/vllm/pull/63909", "author": "cnsiva", "status": "CI_FAILURE", "reason": "CI checks are failing", "ci_status": "FAILURE", "review_decision": "REVIEW_REQUIRED", "mergeable": "MERGEABLE", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Oct 27, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 3, "collisions": []}, {"number": 65343, "title": "[Bugfix][Core] Bound local RPC ring-slot wait by deadline", "url": "https://github.com/vllm-project/vllm/pull/65343", "author": "uzunenes", "status": "CI_FAILURE", "reason": "CI checks are failing", "ci_status": "FAILURE", "review_decision": "REVIEW_REQUIRED", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Nov 03, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 4, "collisions": []}, {"number": 63676, "title": "[Bugfix][ROCm] Keep extend context when model runner v2 reorders the batch", "url": "https://github.com/vllm-project/vllm/pull/63676", "author": "tjtanaa", "status": "BLOCKED_BY_DEP", "reason": "Blocked on open dependency: #63675", "ci_status": "FAILURE", "review_decision": "NONE", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Oct 26, 2026", "blocked_by": [63675], "blocks": [], "files_changed_count": 25, "collisions": [{"colliding_pr": 61952, "risk_level": "MEDIUM", "collision_score": 0.068, "overlapping_files": ["vllm/v1/attention/backends/utils.py"]}]}, {"number": 62729, "title": "[Bugfix] Honor add_generation_prompt and continue_final_message in the DeepSeek V4.1 tokenizer", "url": "https://github.com/vllm-project/vllm/pull/62729", "author": "JohnZhao01", "status": "WAITING_REVIEW", "reason": "Awaiting maintainer review", "ci_status": "SUCCESS", "review_decision": "REVIEW_REQUIRED", "mergeable": "UNKNOWN", "is_draft": false, "staleness_days": 0.0, "updated_at_str": "Nov 03, 2026", "created_at_str": "Oct 20, 2026", "blocked_by": [], "blocks": [], "files_changed_count": 5, "collisions": []}], "hotspots": [{"path": "vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py", "open_pr_count": 4, "pr_numbers": [56307, 61952, 63284, 64621], "total_churn": 606, "min_idle_days": 0.0, "active_prs_count": 4}, {"path": "vllm/v1/attention/backends/gdn_attn.py", "open_pr_count": 3, "pr_numbers": [56307, 61952, 63284], "total_churn": 452, "min_idle_days": 0.0, "active_prs_count": 3}, {"path": "vllm/model_executor/layers/attention/mla_attention.py", "open_pr_count": 3, "pr_numbers": [63956, 64560, 65403], "total_churn": 122, "min_idle_days": 0.0, "active_prs_count": 3}, {"path": "vllm/v1/core/sched/scheduler.py", "open_pr_count": 3, "pr_numbers": [52244, 64927, 65399], "total_churn": 69, "min_idle_days": 0.0, "active_prs_count": 3}, {"path": "tests/watermarking/watermarking_goldens.json", "open_pr_count": 2, "pr_numbers": [56859, 58426], "total_churn": 5447, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "tests/kernels/attention/test_flashmla_sparse.py", "open_pr_count": 2, "pr_numbers": [59418, 62941], "total_churn": 384, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/models/deepseek_v41/nvidia/flashmla.py", "open_pr_count": 2, "pr_numbers": [59418, 62941], "total_churn": 185, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/v1/attention/backends/mla/indexer.py", "open_pr_count": 2, "pr_numbers": [63956, 65305], "total_churn": 184, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "tests/v1/core/test_scheduler.py", "open_pr_count": 2, "pr_numbers": [64927, 65399], "total_churn": 166, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/model_executor/layers/attention/sparse_mla_attention.py", "open_pr_count": 2, "pr_numbers": [63956, 65403], "total_churn": 158, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "tests/v1/attention/test_mla_backends.py", "open_pr_count": 2, "pr_numbers": [64560, 65403], "total_churn": 137, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/model_executor/layers/sparse_attn_indexer.py", "open_pr_count": 2, "pr_numbers": [63956, 65305], "total_churn": 122, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "tests/watermarking/golden_candidates.py", "open_pr_count": 2, "pr_numbers": [56859, 58426], "total_churn": 121, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "docs/features/watermarking.md", "open_pr_count": 2, "pr_numbers": [56859, 58426], "total_churn": 113, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "tests/watermarking/test_watermarking_e2e.py", "open_pr_count": 2, "pr_numbers": [56859, 58426], "total_churn": 74, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "tests/v1/attention/test_sparse_mla_backends.py", "open_pr_count": 2, "pr_numbers": [63956, 65403], "total_churn": 59, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "tests/test_config.py", "open_pr_count": 2, "pr_numbers": [51156, 58426], "total_churn": 57, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/config/watermarking.py", "open_pr_count": 2, "pr_numbers": [56859, 58426], "total_churn": 51, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/v1/worker/gpu_model_runner.py", "open_pr_count": 2, "pr_numbers": [65395, 65402], "total_churn": 48, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "tests/v1/worker/test_gpu_model_runner.py", "open_pr_count": 2, "pr_numbers": [64624, 65402], "total_churn": 46, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/config/attention.py", "open_pr_count": 2, "pr_numbers": [63956, 65403], "total_churn": 42, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/models/glm5next/common/attention.py", "open_pr_count": 2, "pr_numbers": [63956, 65403], "total_churn": 42, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/utils/flashinfer.py", "open_pr_count": 2, "pr_numbers": [57292, 63284], "total_churn": 39, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/v1/attention/backends/mla/sparse_swa.py", "open_pr_count": 2, "pr_numbers": [62941, 65305], "total_churn": 33, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/v1/attention/backends/utils.py", "open_pr_count": 2, "pr_numbers": [61952, 63676], "total_churn": 27, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/envs.py", "open_pr_count": 2, "pr_numbers": [62941, 64927], "total_churn": 26, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/v1/watermarking/watermarker.py", "open_pr_count": 2, "pr_numbers": [56859, 58426], "total_churn": 24, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "tests/watermarking/test_watermarking.py", "open_pr_count": 2, "pr_numbers": [56859, 58426], "total_churn": 19, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/models/glm5next/common/model.py", "open_pr_count": 2, "pr_numbers": [63956, 65403], "total_churn": 18, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/v1/watermarking/factory.py", "open_pr_count": 2, "pr_numbers": [56859, 58426], "total_churn": 17, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/platforms/rocm.py", "open_pr_count": 2, "pr_numbers": [62093, 65398], "total_churn": 14, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/v1/watermarking/gumbel.py", "open_pr_count": 2, "pr_numbers": [56859, 58426], "total_churn": 14, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/config/vllm.py", "open_pr_count": 2, "pr_numbers": [56859, 58426], "total_churn": 11, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/model_executor/layers/quantization/base_config.py", "open_pr_count": 2, "pr_numbers": [65143, 65398], "total_churn": 10, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/v1/attention/backend.py", "open_pr_count": 2, "pr_numbers": [64560, 65305], "total_churn": 10, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": "vllm/v1/watermarking/__init__.py", "open_pr_count": 2, "pr_numbers": [56859, 58426], "total_churn": 9, "min_idle_days": 0.0, "active_prs_count": 2}, {"path": ".buildkite/test_areas/kernels.yaml", "open_pr_count": 2, "pr_numbers": [59418, 64765], "total_churn": 3, "min_idle_days": 0.0, "active_prs_count": 2}], "collisions": [{"pr_a": 58426, "pr_b": 56859, "overlapping_files": ["docs/features/watermarking.md", "tests/watermarking/golden_candidates.py", "tests/watermarking/test_watermarking.py", "tests/watermarking/test_watermarking_e2e.py", "tests/watermarking/watermarking_goldens.json", "vllm/config/vllm.py", "vllm/config/watermarking.py", "vllm/v1/watermarking/__init__.py", "vllm/v1/watermarking/factory.py", "vllm/v1/watermarking/gumbel.py", "vllm/v1/watermarking/watermarker.py"], "collision_score": 0.7, "risk_level": "CRITICAL", "shared_churn": 5900, "pr_a_title": "[Feature][Core] Add native SynthID-Text watermarking", "pr_a_author": "sebfelix", "pr_a_idle_days": 0.0, "pr_b_title": "[watermarking] Add SBW (Stateless Bernoulli Watermarking) algorithm", "pr_b_author": "si-mon-jinn", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 64927, "pr_b": 65399, "overlapping_files": ["tests/v1/core/test_scheduler.py", "vllm/v1/core/sched/scheduler.py"], "collision_score": 0.64, "risk_level": "CRITICAL", "shared_churn": 222, "pr_a_title": "[Core][Scheduler] Add an opt-in time-bounded prefill hold", "pr_a_author": "vorapolsiloai", "pr_a_idle_days": 0.0, "pr_b_title": "[Bugfix][Scheduler] Respect disabled chunked prefill for multimodal requests", "pr_b_author": "jzakrzew", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 62941, "pr_b": 59418, "overlapping_files": ["tests/kernels/attention/test_flashmla_sparse.py", "vllm/models/deepseek_v41/nvidia/flashmla.py"], "collision_score": 0.533, "risk_level": "CRITICAL", "shared_churn": 569, "pr_a_title": "[Perf][DSv4.1] Pack DSpark verify positions into one FlashMLA head tile on SM90", "pr_a_author": "luoyuctl", "pr_a_idle_days": 0.0, "pr_b_title": "[Perf][DSv4.1] Small-head sparse decode on SM90", "pr_b_author": "luoyuctl", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 64621, "pr_b": 63284, "overlapping_files": ["vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py"], "collision_score": 0.52, "risk_level": "CRITICAL", "shared_churn": 211, "pr_a_title": "[Perf][GDN] Use FlashInfer's regular prefill route for short batches", "pr_a_author": "emmericp", "pr_a_idle_days": 0.0, "pr_b_title": "[Kernel] Separate what the GDN prefill selector can run from what it prefers", "pr_b_author": "lesj0610", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 65403, "pr_b": 63956, "overlapping_files": ["tests/v1/attention/test_sparse_mla_backends.py", "vllm/config/attention.py", "vllm/model_executor/layers/attention/mla_attention.py", "vllm/model_executor/layers/attention/sparse_mla_attention.py", "vllm/models/glm5next/common/attention.py", "vllm/models/glm5next/common/model.py"], "collision_score": 0.512, "risk_level": "CRITICAL", "shared_churn": 388, "pr_a_title": "[Perf][Sparse MLA][GLM-5.3] Index-group workspace savings, indexer gate GEMM, opt-in masked-MHA prefill on quantized KV", "pr_a_author": "gaby", "pr_a_idle_days": 0.0, "pr_b_title": "[Perf][DSA] Token-sharded sparse-MLA prefill under TP; remove indexer row sharding", "pr_b_author": "ZJY0516", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 63284, "pr_b": 56307, "overlapping_files": ["vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py", "vllm/v1/attention/backends/gdn_attn.py"], "collision_score": 0.475, "risk_level": "CRITICAL", "shared_churn": 340, "pr_a_title": "[Kernel] Separate what the GDN prefill selector can run from what it prefers", "pr_a_author": "lesj0610", "pr_a_idle_days": 0.0, "pr_b_title": "[ROCm][Kernel] New \"hip\" GDN backend for gfx1151", "pr_b_author": "roberteg16", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 61952, "pr_b": 63284, "overlapping_files": ["vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py", "vllm/v1/attention/backends/gdn_attn.py"], "collision_score": 0.457, "risk_level": "CRITICAL", "shared_churn": 924, "pr_a_title": "[Perf][GDN] Capture the GDN core in breakable CUDA graphs of mixed batches (CUDA graph 2/2)", "pr_a_author": "kimseunghyun-kr", "pr_a_idle_days": 0.0, "pr_b_title": "[Kernel] Separate what the GDN prefill selector can run from what it prefers", "pr_b_author": "lesj0610", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 65403, "pr_b": 64560, "overlapping_files": ["tests/v1/attention/test_mla_backends.py", "vllm/model_executor/layers/attention/mla_attention.py"], "collision_score": 0.455, "risk_level": "CRITICAL", "shared_churn": 218, "pr_a_title": "[Perf][Sparse MLA][GLM-5.3] Index-group workspace savings, indexer gate GEMM, opt-in masked-MHA prefill on quantized KV", "pr_a_author": "gaby", "pr_a_idle_days": 0.0, "pr_b_title": "[ROCm][Perf][MLA] Fuse the decode W_UK absorb, q concat + fp8 quant and head pad via AITER", "pr_b_author": "lucas-santos-amd", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 61952, "pr_b": 56307, "overlapping_files": ["vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py", "vllm/v1/attention/backends/gdn_attn.py"], "collision_score": 0.441, "risk_level": "CRITICAL", "shared_churn": 830, "pr_a_title": "[Perf][GDN] Capture the GDN core in breakable CUDA graphs of mixed batches (CUDA graph 2/2)", "pr_a_author": "kimseunghyun-kr", "pr_a_idle_days": 0.0, "pr_b_title": "[ROCm][Kernel] New \"hip\" GDN backend for gfx1151", "pr_b_author": "roberteg16", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 61952, "pr_b": 64621, "overlapping_files": ["vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py"], "collision_score": 0.433, "risk_level": "CRITICAL", "shared_churn": 285, "pr_a_title": "[Perf][GDN] Capture the GDN core in breakable CUDA graphs of mixed batches (CUDA graph 2/2)", "pr_a_author": "kimseunghyun-kr", "pr_a_idle_days": 0.0, "pr_b_title": "[Perf][GDN] Use FlashInfer's regular prefill route for short batches", "pr_b_author": "emmericp", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 65305, "pr_b": 63956, "overlapping_files": ["vllm/model_executor/layers/sparse_attn_indexer.py", "vllm/v1/attention/backends/mla/indexer.py"], "collision_score": 0.431, "risk_level": "CRITICAL", "shared_churn": 306, "pr_a_title": "[Feature][PCP] Support DeepSeek V4 with FlashMLA on NVIDIA", "pr_a_author": "pisceskkk", "pr_a_idle_days": 0.0, "pr_b_title": "[Perf][DSA] Token-sharded sparse-MLA prefill under TP; remove indexer row sharding", "pr_b_author": "ZJY0516", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 64621, "pr_b": 56307, "overlapping_files": ["vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py"], "collision_score": 0.31, "risk_level": "HIGH", "shared_churn": 132, "pr_a_title": "[Perf][GDN] Use FlashInfer's regular prefill route for short batches", "pr_a_author": "emmericp", "pr_a_idle_days": 0.0, "pr_b_title": "[ROCm][Kernel] New \"hip\" GDN backend for gfx1151", "pr_b_author": "roberteg16", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 63956, "pr_b": 64560, "overlapping_files": ["vllm/model_executor/layers/attention/mla_attention.py"], "collision_score": 0.214, "risk_level": "HIGH", "shared_churn": 94, "pr_a_title": "[Perf][DSA] Token-sharded sparse-MLA prefill under TP; remove indexer row sharding", "pr_a_author": "ZJY0516", "pr_a_idle_days": 0.0, "pr_b_title": "[ROCm][Perf][MLA] Fuse the decode W_UK absorb, q concat + fp8 quant and head pad via AITER", "pr_b_author": "lucas-santos-amd", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 64624, "pr_b": 65402, "overlapping_files": ["tests/v1/worker/test_gpu_model_runner.py"], "collision_score": 0.242, "risk_level": "MEDIUM", "shared_churn": 46, "pr_a_title": "[Hybrid] Round the attention block size up to prefix_match_unit", "pr_a_author": "emmericp", "pr_a_idle_days": 0.0, "pr_b_title": "[Bugfix][MRv1][Spec Decode] Count NaNs in logits per request, not per logits row", "pr_b_author": "DemisEom", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 65402, "pr_b": 65395, "overlapping_files": ["vllm/v1/worker/gpu_model_runner.py"], "collision_score": 0.216, "risk_level": "MEDIUM", "shared_churn": 48, "pr_a_title": "[Bugfix][MRv1][Spec Decode] Count NaNs in logits per request, not per logits row", "pr_a_author": "DemisEom", "pr_a_idle_days": 0.0, "pr_b_title": "[Perf][Attention] Cache FlexAttention K/V cache views per tensor", "pr_b_author": "selimfedakar", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 52244, "pr_b": 64927, "overlapping_files": ["vllm/v1/core/sched/scheduler.py"], "collision_score": 0.183, "risk_level": "MEDIUM", "shared_churn": 54, "pr_a_title": "[Bugfix][V1] Restore hybrid GDN prefix-cache hits under MTP spec decoding", "pr_a_author": "Y-aang", "pr_a_idle_days": 0.0, "pr_b_title": "[Core][Scheduler] Add an opt-in time-bounded prefill hold", "pr_b_author": "vorapolsiloai", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 57292, "pr_b": 63284, "overlapping_files": ["vllm/utils/flashinfer.py"], "collision_score": 0.164, "risk_level": "MEDIUM", "shared_churn": 39, "pr_a_title": "[Bugfix][DSv4.1] Fail fast on SM120 when FlashInfer lacks runtime page sizes", "pr_a_author": "luoyuctl", "pr_a_idle_days": 0.0, "pr_b_title": "[Kernel] Separate what the GDN prefill selector can run from what it prefers", "pr_b_author": "lesj0610", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 51156, "pr_b": 58426, "overlapping_files": ["tests/test_config.py"], "collision_score": 0.144, "risk_level": "MEDIUM", "shared_churn": 57, "pr_a_title": "[Bugfix][Spec Decode] Bound draft max_model_len by the target before logging", "pr_a_author": "adityasingh2400", "pr_a_idle_days": 0.0, "pr_b_title": "[Feature][Core] Add native SynthID-Text watermarking", "pr_b_author": "sebfelix", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 64927, "pr_b": 62941, "overlapping_files": ["vllm/envs.py"], "collision_score": 0.127, "risk_level": "MEDIUM", "shared_churn": 26, "pr_a_title": "[Core][Scheduler] Add an opt-in time-bounded prefill hold", "pr_a_author": "vorapolsiloai", "pr_a_idle_days": 0.0, "pr_b_title": "[Perf][DSv4.1] Pack DSpark verify positions into one FlashMLA head tile on SM90", "pr_b_author": "luoyuctl", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 52244, "pr_b": 65399, "overlapping_files": ["vllm/v1/core/sched/scheduler.py"], "collision_score": 0.123, "risk_level": "MEDIUM", "shared_churn": 28, "pr_a_title": "[Bugfix][V1] Restore hybrid GDN prefix-cache hits under MTP spec decoding", "pr_a_author": "Y-aang", "pr_a_idle_days": 0.0, "pr_b_title": "[Bugfix][Scheduler] Respect disabled chunked prefill for multimodal requests", "pr_b_author": "jzakrzew", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 65305, "pr_b": 62941, "overlapping_files": ["vllm/v1/attention/backends/mla/sparse_swa.py"], "collision_score": 0.088, "risk_level": "MEDIUM", "shared_churn": 33, "pr_a_title": "[Feature][PCP] Support DeepSeek V4 with FlashMLA on NVIDIA", "pr_a_author": "pisceskkk", "pr_a_idle_days": 0.0, "pr_b_title": "[Perf][DSv4.1] Pack DSpark verify positions into one FlashMLA head tile on SM90", "pr_b_author": "luoyuctl", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 61952, "pr_b": 63676, "overlapping_files": ["vllm/v1/attention/backends/utils.py"], "collision_score": 0.068, "risk_level": "MEDIUM", "shared_churn": 27, "pr_a_title": "[Perf][GDN] Capture the GDN core in breakable CUDA graphs of mixed batches (CUDA graph 2/2)", "pr_a_author": "kimseunghyun-kr", "pr_a_idle_days": 0.0, "pr_b_title": "[Bugfix][ROCm] Keep extend context when model runner v2 reorders the batch", "pr_b_author": "tjtanaa", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 65398, "pr_b": 62093, "overlapping_files": ["vllm/platforms/rocm.py"], "collision_score": 0.057, "risk_level": "LOW", "shared_churn": 14, "pr_a_title": "[Quantization] Add mxfp4_hadamard32_moe online quantization", "pr_a_author": "mgoin", "pr_a_idle_days": 0.0, "pr_b_title": "[ROCm] do not blindly pick gpu 0 for asic info, consider *_VISIBLE_DEVICES", "pr_b_author": "Kezii", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 65398, "pr_b": 65143, "overlapping_files": ["vllm/model_executor/layers/quantization/base_config.py"], "collision_score": 0.045, "risk_level": "LOW", "shared_churn": 10, "pr_a_title": "[Quantization] Add mxfp4_hadamard32_moe online quantization", "pr_a_author": "mgoin", "pr_a_idle_days": 0.0, "pr_b_title": "[Metrics][Quantization] Let quantization configs report weight bytes for MFU", "pr_b_author": "varad-more", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 65305, "pr_b": 64560, "overlapping_files": ["vllm/v1/attention/backend.py"], "collision_score": 0.043, "risk_level": "LOW", "shared_churn": 10, "pr_a_title": "[Feature][PCP] Support DeepSeek V4 with FlashMLA on NVIDIA", "pr_a_author": "pisceskkk", "pr_a_idle_days": 0.0, "pr_b_title": "[ROCm][Perf][MLA] Fuse the decode W_UK absorb, q concat + fp8 quant and head pad via AITER", "pr_b_author": "lucas-santos-amd", "pr_b_idle_days": 0.0, "is_live_race": true}, {"pr_a": 59418, "pr_b": 64765, "overlapping_files": [".buildkite/test_areas/kernels.yaml"], "collision_score": 0.043, "risk_level": "LOW", "shared_churn": 3, "pr_a_title": "[Perf][DSv4.1] Small-head sparse decode on SM90", "pr_a_author": "luoyuctl", "pr_a_idle_days": 0.0, "pr_b_title": "[Misc] Use the b12x package shipped with flashinfer-python", "pr_b_author": "stecasta", "pr_b_idle_days": 0.0, "is_live_race": true}], "chains": [[56606, 65398], [62750, 65398], [61779, 61952], [52838, 62933], [63675, 63676]]};
+    let cy = null;
+    let currentFilter = 'ALL';
+    let searchQuery = '';
+    let selectedPrNum = null;
+    let dagScope = 'stacks'; // 'stacks' or 'all'
+
+    // Register Cytoscape-Dagre plugin safely
+    if (typeof cytoscape !== 'undefined' && typeof cytoscapeDagre !== 'undefined') {
+      try {
+        cytoscape.use(cytoscapeDagre);
+      } catch (e) {
+        console.warn('cytoscape.use(cytoscapeDagre) notice:', e);
+      }
+    }
+
+    // Load Data
+    async function loadRadarData() {
+      if (window.__EMBEDDED_PR_RADAR_DATA__) {
+        DATA = window.__EMBEDDED_PR_RADAR_DATA__;
+      } else {
+        try {
+          const resp = await fetch('pr_radar_data.json');
+          if (resp.ok) {
+            DATA = await resp.json();
+          }
+        } catch (e) {
+          console.warn('Failed to fetch pr_radar_data.json:', e);
+        }
+      }
+
+      if (DATA) {
+        initUI();
+      }
+    }
+
+    function initUI() {
+      // 1. Navbar Stats
+      document.getElementById('repoNameDisplay').textContent = DATA.summary.repo;
+      document.getElementById('statTotalPrs').textContent = DATA.summary.total_open_prs_analyzed;
+      document.getElementById('statStacks').textContent = DATA.summary.dependency_stacks_count;
+      document.getElementById('statCollisions').textContent = DATA.summary.critical_file_collisions;
+
+      // 2. Render Views
+      renderCollisions();
+      renderTriageKanban();
+      initCytoscape();
+    }
+
+    // Tab Switcher
+    function switchView(view) {
+      const graphView = document.getElementById('viewGraph');
+      const collisionView = document.getElementById('viewCollisions');
+      const triageView = document.getElementById('viewTriage');
+
+      const btnG = document.getElementById('tabGraphBtn');
+      const btnC = document.getElementById('tabCollisionBtn');
+      const btnT = document.getElementById('tabTriageBtn');
+
+      [btnG, btnC, btnT].forEach(b => {
+        b.className = "flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-semibold text-slate-400 hover:text-slate-200 transition";
+      });
+
+      graphView.classList.add('hidden');
+      collisionView.classList.add('hidden');
+      triageView.classList.add('hidden');
+
+      if (view === 'graph') {
+        graphView.classList.remove('hidden');
+        btnG.className = "flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-semibold bg-emerald-500 text-white shadow-sm transition";
+        setTimeout(() => {
+          if (cy) {
+            cy.resize();
+            cy.fit();
+          }
+        }, 50);
+      } else if (view === 'collisions') {
+        collisionView.classList.remove('hidden');
+        btnC.className = "flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-semibold bg-emerald-500 text-white shadow-sm transition";
+        renderCollisions();
+      } else if (view === 'triage') {
+        triageView.classList.remove('hidden');
+        btnT.className = "flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-semibold bg-emerald-500 text-white shadow-sm transition";
+        renderTriageKanban();
+      }
+    }
+
+    // Subsystem filter buttons
+    function setSubsystemFilter(filter, evt) {
+      currentFilter = filter;
+      document.querySelectorAll('.subsystem-pill').forEach(btn => {
+        btn.className = "subsystem-pill px-2.5 py-0.5 rounded-full font-medium bg-slate-800 text-slate-400 hover:text-slate-200 transition";
+      });
+
+      if (evt && evt.target) {
+        evt.target.className = "subsystem-pill px-2.5 py-0.5 rounded-full font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 transition";
+      } else {
+        const firstPill = document.querySelector('.subsystem-pill');
+        if (firstPill && filter === 'ALL') {
+          firstPill.className = "subsystem-pill px-2.5 py-0.5 rounded-full font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 transition";
+        }
+      }
+
+      const badge = document.getElementById('activeFilterBadge');
+      if (filter !== 'ALL') {
+        badge.textContent = `Filtered: ${filter}`;
+        badge.classList.remove('hidden');
+      } else if (!searchQuery) {
+        badge.classList.add('hidden');
+      }
+
+      applyFilters();
+    }
+
+    function handleSearch(q) {
+      searchQuery = q.toLowerCase();
+      const badge = document.getElementById('activeFilterBadge');
+      if (searchQuery || currentFilter !== 'ALL') {
+        badge.textContent = searchQuery ? `Search: "${q}"` : `Filtered: ${currentFilter}`;
+        badge.classList.remove('hidden');
+      } else {
+        badge.classList.add('hidden');
+      }
+      applyFilters();
+    }
+
+    function isPrVisible(pr) {
+      if (!pr) return true;
+      if (currentFilter !== 'ALL') {
+        const regex = new RegExp(currentFilter, 'i');
+        if (!regex.test(pr.title)) return false;
+      }
+      if (searchQuery) {
+        const matchTitle = pr.title && pr.title.toLowerCase().includes(searchQuery);
+        const matchAuthor = pr.author && pr.author.toLowerCase().includes(searchQuery);
+        const matchNum = String(pr.number).includes(searchQuery);
+        if (!matchTitle && !matchAuthor && !matchNum) return false;
+      }
+      return true;
+    }
+
+    function applyFilters() {
+      renderCollisions();
+      renderTriageKanban();
+      updateCytoscapeGraph();
+    }
+
+    function setDagScope(scope) {
+      dagScope = scope;
+      const btnStacks = document.getElementById('dagScopeStacksBtn');
+      const btnAll = document.getElementById('dagScopeAllBtn');
+
+      if (scope === 'stacks') {
+        btnStacks.className = "px-2.5 py-1 rounded text-xs font-semibold bg-emerald-500 text-white transition";
+        btnAll.className = "px-2.5 py-1 rounded text-xs font-semibold bg-slate-800 text-slate-400 hover:text-slate-200 transition";
+      } else {
+        btnAll.className = "px-2.5 py-1 rounded text-xs font-semibold bg-emerald-500 text-white transition";
+        btnStacks.className = "px-2.5 py-1 rounded text-xs font-semibold bg-slate-800 text-slate-400 hover:text-slate-200 transition";
+      }
+      updateCytoscapeGraph();
+    }
+
+    // -------------------------------------------------------------
+    // CYTOSCAPE DAG INITIALIZATION & RE-RENDER
+    // -------------------------------------------------------------
+    function getStackedPrSet() {
+      const stacked = new Set();
+      (DATA.chains || []).forEach(chain => {
+        chain.forEach(num => stacked.add(num));
+      });
+      return stacked;
+    }
+
+    function initCytoscape() {
+      updateCytoscapeGraph();
+    }
+
+    function updateCytoscapeGraph() {
+      if (!DATA) return;
+      const stackedSet = getStackedPrSet();
+      document.getElementById('dagStacksCount').textContent = stackedSet.size;
+      document.getElementById('dagAllCount').textContent = DATA.prs.length;
+
+      const elements = [];
+      const nodeMap = new Set();
+
+      // Determine which PRs to include
+      DATA.prs.forEach(pr => {
+        if (!pr) return;
+        if (!isPrVisible(pr)) return;
+
+        const isStacked = stackedSet.has(pr.number);
+        if (dagScope === 'stacks' && !isStacked) {
+          return; // Skip detached PRs in stacks view
+        }
+
+        nodeMap.add(String(pr.number));
+
+        let nodeColor = '#06b6d4'; // default cyan (waiting review)
+        if (pr.status === 'READY_TO_MERGE') nodeColor = '#10b981'; // green
+        else if (pr.status === 'BLOCKED_BY_DEP') nodeColor = '#d946ef'; // fuchsia
+        else if (pr.status === 'CI_FAILURE' || pr.status === 'CONFLICTING') nodeColor = '#f43f5e'; // red
+        else if (pr.is_draft) nodeColor = '#64748b'; // slate
+
+        elements.push({
+          data: {
+            id: String(pr.number),
+            label: `#${pr.number}`,
+            title: pr.title,
+            color: nodeColor,
+            author: pr.author,
+            status: pr.status,
+            idle: pr.staleness_days,
+          }
+        });
+      });
+
+      // Add edges from dependency chains
+      (DATA.chains || []).forEach(chain => {
+        for (let i = 0; i < chain.length - 1; i++) {
+          const from = String(chain[i + 1]); // Waiting PR
+          const to = String(chain[i]);       // Base PR
+
+          // If from or to is in the nodeMap (or if dagScope === 'stacks')
+          const fromVisible = nodeMap.has(from);
+          const toVisible = nodeMap.has(to);
+
+          if (fromVisible || toVisible || dagScope === 'stacks') {
+            if (!nodeMap.has(to)) {
+              // Add external base node
+              const targetDossier = DATA.prs.find(p => p && p.number == to);
+              const title = targetDossier ? targetDossier.title : `Upstream PR #${to}`;
+              elements.push({
+                data: {
+                  id: to,
+                  label: `#${to}`,
+                  title: title,
+                  color: '#475569',
+                  author: targetDossier ? targetDossier.author : 'External',
+                  status: 'BASE',
+                  idle: targetDossier ? targetDossier.staleness_days : 0,
+                }
+              });
+              nodeMap.add(to);
+            }
+
+            if (!nodeMap.has(from)) {
+              const srcDossier = DATA.prs.find(p => p && p.number == from);
+              const title = srcDossier ? srcDossier.title : `Stacked PR #${from}`;
+              elements.push({
+                data: {
+                  id: from,
+                  label: `#${from}`,
+                  title: title,
+                  color: '#d946ef',
+                  author: srcDossier ? srcDossier.author : 'External',
+                  status: 'STACKED',
+                  idle: srcDossier ? srcDossier.staleness_days : 0,
+                }
+              });
+              nodeMap.add(from);
+            }
+
+            elements.push({
+              data: {
+                id: `edge-${from}-${to}`,
+                source: from,
+                target: to,
+              }
+            });
+          }
+        }
+      });
+
+      // Empty notice
+      const emptyNotice = document.getElementById('graphEmptyNotice');
+      if (elements.length === 0) {
+        emptyNotice.classList.remove('hidden');
+      } else {
+        emptyNotice.classList.add('hidden');
+      }
+
+      if (cy) {
+        cy.destroy();
+      }
+
+      const container = document.getElementById('cy');
+      if (!container) return;
+
+      cy = cytoscape({
+        container: container,
+        elements: elements,
+        style: [
+          {
+            selector: 'node',
+            style: {
+              'background-color': 'data(color)',
+              'label': 'data(label)',
+              'color': '#f8fafc',
+              'font-size': '11px',
+              'font-family': 'monospace',
+              'font-weight': 'bold',
+              'text-valign': 'center',
+              'text-halign': 'center',
+              'width': '52px',
+              'height': '52px',
+              'border-width': '2px',
+              'border-color': '#0f172a',
+              'shadow-blur': 10,
+              'shadow-color': 'data(color)',
+              'shadow-opacity': 0.4,
+              'transition-property': 'background-color, border-color, shadow-blur',
+              'transition-duration': '0.2s',
+            }
+          },
+          {
+            selector: 'edge',
+            style: {
+              'width': 3,
+              'line-color': '#d946ef',
+              'target-arrow-color': '#d946ef',
+              'target-arrow-shape': 'triangle',
+              'curve-style': 'bezier',
+              'arrow-scale': 1.3,
+              'line-style': 'solid',
+              'opacity': 0.85,
+            }
+          },
+          {
+            selector: '.faded',
+            style: {
+              'opacity': 0.15,
+            }
+          },
+          {
+            selector: '.highlighted',
+            style: {
+              'border-width': '4px',
+              'border-color': '#ffffff',
+              'shadow-blur': 20,
+              'shadow-opacity': 1.0,
+            }
+          }
+        ],
+      });
+
+      // Try dagre layout with fallback to breadthfirst
+      try {
+        cy.layout({
+          name: 'dagre',
+          rankDir: 'BT', // Base at top, stacked below
+          nodeSep: 60,
+          rankSep: 110,
+          padding: 80,
+        }).run();
+      } catch (err) {
+        console.warn('Dagre layout failed, using breadthfirst fallback:', err);
+        cy.layout({
+          name: 'breadthfirst',
+          directed: true,
+          spacingFactor: 1.5,
+          padding: 80,
+        }).run();
+      }
+
+      cy.on('tap', 'node', function(evt) {
+        const node = evt.target;
+        const prNum = parseInt(node.id());
+        openDrawer(prNum);
+
+        cy.elements().removeClass('highlighted faded');
+        const connected = node.neighborhood().add(node);
+        cy.elements().not(connected).addClass('faded');
+        connected.addClass('highlighted');
+      });
+
+      cy.on('tap', function(evt) {
+        if (evt.target === cy) {
+          cy.elements().removeClass('highlighted faded');
+          closeDrawer();
+        }
+      });
+
+      setTimeout(() => {
+        if (cy) {
+          cy.resize();
+          cy.fit(undefined, 80);
+        }
+      }, 50);
+    }
+
+    function resetGraphView() {
+      if (cy) {
+        cy.elements().removeClass('highlighted faded');
+        cy.fit(undefined, 80);
+      }
+    }
+
+    // -------------------------------------------------------------
+    // HOTSPOTS & COLLISIONS VIEW (Reactive to Subsystem Filter & Idle Days)
+    // -------------------------------------------------------------
+    function renderCollisions() {
+      const container = document.getElementById('hotspotContainer');
+      const tableBody = document.getElementById('collisionTableBody');
+      if (!container || !tableBody || !DATA) return;
+
+      container.innerHTML = '';
+      tableBody.innerHTML = '';
+
+      // Map of PR numbers for lookup
+      const prMap = {};
+      (DATA.prs || []).forEach(p => { if (p) prMap[p.number] = p; });
+
+      // 1. Filter Hotspot Files
+      const filteredHotspots = (DATA.hotspots || []).filter(h => {
+        // If ALL and no search, keep
+        if (currentFilter === 'ALL' && !searchQuery) return true;
+
+        // Check if path matches filter
+        if (currentFilter !== 'ALL') {
+          const regex = new RegExp(currentFilter, 'i');
+          const pathMatch = regex.test(h.path);
+          const prMatch = h.pr_numbers.some(num => {
+            const pr = prMap[num];
+            return pr && regex.test(pr.title);
+          });
+          if (!pathMatch && !prMatch) return false;
+        }
+
+        // Check search query
+        if (searchQuery) {
+          const pathMatch = h.path.toLowerCase().includes(searchQuery);
+          const prMatch = h.pr_numbers.some(num => {
+            const pr = prMap[num];
+            return pr && (pr.title.toLowerCase().includes(searchQuery) || String(num).includes(searchQuery));
+          });
+          if (!pathMatch && !prMatch) return false;
+        }
+
+        return true;
+      });
+
+      document.getElementById('hotspotsCountBadge').textContent = filteredHotspots.length;
+
+      if (filteredHotspots.length === 0) {
+        container.innerHTML = `
+          <div class="col-span-full p-6 text-center text-slate-500 bg-dark-950 rounded-lg border border-slate-800">
+            No conflict hotspot files match the active filter "${currentFilter}".
+          </div>
+        `;
+      } else {
+        filteredHotspots.slice(0, 9).forEach(h => {
+          const card = document.createElement('div');
+          card.className = "bg-dark-950 p-3.5 rounded-lg border border-slate-800 hover:border-slate-700 transition";
+
+          // Idle indicator for hotspot
+          const idleBadge = h.active_prs_count > 0 
+            ? `<span class="text-rose-400 font-bold bg-rose-500/10 px-1.5 py-0.5 rounded text-[10px] border border-rose-500/20">🔥 ${h.active_prs_count} Active (&lt;5d)</span>`
+            : `<span class="text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded text-[10px]">Min idle: ${h.min_idle_days.toFixed(0)}d</span>`;
+
+          card.innerHTML = `
+            <div class="flex items-center justify-between">
+              <span class="text-rose-400 font-bold font-mono text-[11px]">${h.open_pr_count} Open PRs</span>
+              ${idleBadge}
+            </div>
+            <p class="font-mono text-xs text-slate-200 mt-1.5 font-semibold truncate" title="${h.path}">
+              ${h.path.split('/').slice(-2).join('/')}
+            </p>
+            <div class="mt-2.5 flex items-center justify-between">
+              <span class="text-slate-500 text-[10px]">${h.total_churn} lines churn</span>
+              <div class="flex flex-wrap gap-1">
+                ${h.pr_numbers.map(n => {
+                  const pr = prMap[n];
+                  const idleStr = pr ? `${pr.staleness_days.toFixed(0)}d` : '';
+                  return `
+                    <span onclick="openDrawer(${n})" class="cursor-pointer text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 hover:bg-emerald-500/20 hover:text-emerald-300 transition text-slate-300" title="PR #${n} (Idle: ${idleStr})">
+                      #${n}
+                    </span>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          `;
+          container.appendChild(card);
+        });
+      }
+
+      // 2. Filter Pairwise Collisions
+      const filteredCollisions = (DATA.collisions || []).filter(c => {
+        const prA = prMap[c.pr_a];
+        const prB = prMap[c.pr_b];
+
+        if (currentFilter === 'ALL' && !searchQuery) return true;
+
+        // Subsystem match: either PR A or PR B matches
+        if (currentFilter !== 'ALL') {
+          const matchA = prA && isPrVisible(prA);
+          const matchB = prB && isPrVisible(prB);
+          const fileMatch = c.overlapping_files.some(f => new RegExp(currentFilter, 'i').test(f));
+          if (!matchA && !matchB && !fileMatch) return false;
+        }
+
+        // Search match
+        if (searchQuery) {
+          const matchA = prA && isPrVisible(prA);
+          const matchB = prB && isPrVisible(prB);
+          const fileMatch = c.overlapping_files.some(f => f.toLowerCase().includes(searchQuery));
+          if (!matchA && !matchB && !fileMatch) return false;
+        }
+
+        return true;
+      });
+
+      document.getElementById('collisionsCountBadge').textContent = filteredCollisions.length;
+
+      if (filteredCollisions.length === 0) {
+        tableBody.innerHTML = `
+          <tr>
+            <td colspan="7" class="py-6 text-center text-slate-500 font-sans">
+              No pairwise collisions match the active filter "${currentFilter}".
+            </td>
+          </tr>
+        `;
+      } else {
+        filteredCollisions.forEach(c => {
+          const tr = document.createElement('tr');
+          tr.className = "hover:bg-dark-850/60 transition cursor-pointer";
+          tr.onclick = () => openDrawer(c.pr_a);
+
+          const riskBadge = c.risk_level === 'CRITICAL'
+            ? '<span class="text-rose-400 font-bold bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/30">CRITICAL</span>'
+            : (c.risk_level === 'HIGH'
+              ? '<span class="text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">HIGH</span>'
+              : '<span class="text-slate-400 bg-slate-800 px-2 py-0.5 rounded">MEDIUM</span>');
+
+          // Collision Dynamics badge with Idle Days
+          let dynamicsBadge = '';
+          if (c.is_live_race) {
+            dynamicsBadge = '<span class="text-rose-400 font-bold bg-rose-500/15 px-2 py-0.5 rounded border border-rose-500/30">🔥 LIVE RACE (&lt;5d)</span>';
+          } else if (c.pr_a_idle_days >= 14 || c.pr_b_idle_days >= 14) {
+            const stalePr = c.pr_a_idle_days >= 14 ? `#${c.pr_a}` : `#${c.pr_b}`;
+            const staleDays = Math.max(c.pr_a_idle_days, c.pr_b_idle_days).toFixed(0);
+            dynamicsBadge = `<span class="text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">⚠️ ${stalePr} Stale (${staleDays}d)</span>`;
+          } else {
+            dynamicsBadge = '<span class="text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded">💤 Inactive</span>';
+          }
+
+          tr.innerHTML = `
+            <td class="py-2.5 px-3">
+              <span class="text-cyan-400 font-bold">#${c.pr_a}</span>
+              <span class="text-[10px] text-slate-400 ml-1">(${c.pr_a_idle_days.toFixed(0)}d idle)</span>
+            </td>
+            <td class="py-2.5 px-3">
+              <span class="text-cyan-400 font-bold">#${c.pr_b}</span>
+              <span class="text-[10px] text-slate-400 ml-1">(${c.pr_b_idle_days.toFixed(0)}d idle)</span>
+            </td>
+            <td class="py-2.5 px-3 font-sans">${dynamicsBadge}</td>
+            <td class="py-2.5 px-3 font-sans">${riskBadge}</td>
+            <td class="py-2.5 px-3 text-slate-300">${c.collision_score.toFixed(2)}</td>
+            <td class="py-2.5 px-3 text-slate-300">${c.shared_churn} lines</td>
+            <td class="py-2.5 px-3 text-slate-400 text-[11px] truncate max-w-xs font-sans" title="${c.overlapping_files.join(', ')}">
+              ${c.overlapping_files.map(f => f.split('/').pop()).join(', ')}
+            </td>
+          `;
+          tableBody.appendChild(tr);
+        });
+      }
+    }
+
+    // -------------------------------------------------------------
+    // TRIAGE KANBAN BOARD (Prominent Idle Days & Dates)
+    // -------------------------------------------------------------
+    function renderTriageKanban() {
+      const colReady = document.getElementById('colReadyList');
+      const colBlocked = document.getElementById('colBlockedList');
+      const colReview = document.getElementById('colReviewList');
+      const colFail = document.getElementById('colFailList');
+      const colDraft = document.getElementById('colDraftList');
+
+      if (!colReady || !DATA) return;
+
+      [colReady, colBlocked, colReview, colFail, colDraft].forEach(col => col.innerHTML = '');
+
+      let counts = { ready: 0, blocked: 0, review: 0, fail: 0, draft: 0 };
+
+      (DATA.prs || []).filter(isPrVisible).forEach(pr => {
+        if (!pr) return;
+        const card = document.createElement('div');
+        card.className = "bg-dark-950 p-3 rounded-lg border border-slate-800/80 hover:border-slate-700 transition cursor-pointer shadow-sm";
+        card.onclick = () => openDrawer(pr.number);
+
+        const ciIcon = pr.ci_status === 'SUCCESS' ? '<span class="text-emerald-400">✓ CI Pass</span>' :
+                       (pr.ci_status === 'FAILURE' ? '<span class="text-rose-400">✗ CI Fail</span>' : '<span class="text-amber-400">⋯ CI Run</span>');
+
+        // Idle badge formatting
+        let idleBadge = '';
+        if (pr.staleness_days >= 14) {
+          idleBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-rose-500/15 text-rose-300 border border-rose-500/20">Idle: ${pr.staleness_days}d (Stale)</span>`;
+        } else if (pr.staleness_days >= 5) {
+          idleBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-amber-500/10 text-amber-300">Idle: ${pr.staleness_days}d</span>`;
+        } else {
+          idleBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-300">⚡ Active (${pr.staleness_days}d)</span>`;
+        }
+
+        const dateStr = pr.updated_at_str || `${pr.staleness_days}d ago`;
+
+        card.innerHTML = `
+          <div class="flex items-center justify-between text-[11px]">
+            <span class="font-mono font-bold text-cyan-400">#${pr.number}</span>
+            <span class="text-slate-500 font-mono">${ciIcon}</span>
+          </div>
+          <p class="font-semibold text-slate-200 mt-1 text-xs line-clamp-2" title="${pr.title}">${pr.title}</p>
+          <div class="mt-2.5 flex items-center justify-between text-[10px] text-slate-400">
+            <span>by <strong>${pr.author}</strong></span>
+            ${idleBadge}
+          </div>
+          <div class="mt-1.5 pt-1.5 border-t border-slate-900 flex items-center justify-between text-[9px] text-slate-500 font-mono">
+            <span>${pr.files_changed_count} files</span>
+            <span>Updated: ${dateStr}</span>
+          </div>
+        `;
+
+        if (pr.is_draft) {
+          colDraft.appendChild(card);
+          counts.draft++;
+        } else if (pr.status === 'READY_TO_MERGE') {
+          colReady.appendChild(card);
+          counts.ready++;
+        } else if (pr.status === 'BLOCKED_BY_DEP') {
+          colBlocked.appendChild(card);
+          counts.blocked++;
+        } else if (pr.status === 'CI_FAILURE' || pr.status === 'CONFLICTING') {
+          colFail.appendChild(card);
+          counts.fail++;
+        } else {
+          colReview.appendChild(card);
+          counts.review++;
+        }
+      });
+
+      document.getElementById('colCountReady').textContent = counts.ready;
+      document.getElementById('colCountBlocked').textContent = counts.blocked;
+      document.getElementById('colCountReview').textContent = counts.review;
+      document.getElementById('colCountFail').textContent = counts.fail;
+      document.getElementById('colCountDraft').textContent = counts.draft;
+    }
+
+    // -------------------------------------------------------------
+    // PR DOSSIER DRAWER
+    // -------------------------------------------------------------
+    function openDrawer(prNum) {
+      selectedPrNum = prNum;
+      const dossier = DATA.prs.find(p => p && p.number == prNum);
+      const drawer = document.getElementById('dossierDrawer');
+      if (!dossier) return;
+
+      document.getElementById('drawerPrBadge').textContent = `PR #${dossier.number}`;
+      document.getElementById('drawerTitle').textContent = dossier.title;
+      document.getElementById('drawerAuthor').textContent = dossier.author;
+      document.getElementById('drawerIdleDays').textContent = `${dossier.staleness_days} days idle`;
+      document.getElementById('drawerUpdatedDate').textContent = dossier.updated_at_str || '';
+      document.getElementById('drawerGithubLink').href = dossier.url;
+      document.getElementById('drawerDiagnosis').textContent = dossier.reason;
+
+      // Status Badge
+      const statusBadge = document.getElementById('drawerStatusBadge');
+      statusBadge.textContent = dossier.status;
+      if (dossier.status === 'READY_TO_MERGE') statusBadge.className = 'text-xs px-2 py-0.5 rounded font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+      else if (dossier.status === 'BLOCKED_BY_DEP') statusBadge.className = 'text-xs px-2 py-0.5 rounded font-semibold bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30';
+      else if (dossier.status === 'CI_FAILURE') statusBadge.className = 'text-xs px-2 py-0.5 rounded font-semibold bg-rose-500/20 text-rose-300 border border-rose-500/30';
+      else statusBadge.className = 'text-xs px-2 py-0.5 rounded font-semibold bg-slate-800 text-slate-300';
+
+      // Technical Signals
+      document.getElementById('drawerCi').textContent = dossier.ci_status;
+      document.getElementById('drawerCi').className = dossier.ci_status === 'SUCCESS' ? 'font-bold text-emerald-400 mt-0.5 font-mono' : 'font-bold text-rose-400 mt-0.5 font-mono';
+      document.getElementById('drawerReview').textContent = dossier.review_decision || 'NONE';
+      document.getElementById('drawerMergeable').textContent = dossier.mergeable;
+      document.getElementById('drawerFilesCount').textContent = `${dossier.files_changed_count} files`;
+
+      // Blocked by
+      const blockedByContainer = document.getElementById('drawerBlockedBy');
+      if (dossier.blocked_by && dossier.blocked_by.length > 0) {
+        blockedByContainer.innerHTML = dossier.blocked_by.map(n => `
+          <span onclick="openDrawer(${n})" class="cursor-pointer px-2 py-0.5 rounded bg-fuchsia-500/10 text-fuchsia-400 border border-fuchsia-500/20 hover:bg-fuchsia-500/20 transition">
+            #${n}
+          </span>
+        `).join('');
+      } else {
+        blockedByContainer.innerHTML = '<span class="text-slate-500 italic font-sans text-xs">None (Unblocked)</span>';
+      }
+
+      // Blocks
+      const blocksContainer = document.getElementById('drawerBlocks');
+      if (dossier.blocks && dossier.blocks.length > 0) {
+        blocksContainer.innerHTML = dossier.blocks.map(n => `
+          <span onclick="openDrawer(${n})" class="cursor-pointer px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 transition">
+            #${n}
+          </span>
+        `).join('');
+      } else {
+        blocksContainer.innerHTML = '<span class="text-slate-500 italic font-sans text-xs">None</span>';
+      }
+
+      // Collisions
+      const collisionsContainer = document.getElementById('drawerCollisionsList');
+      if (dossier.collisions && dossier.collisions.length > 0) {
+        collisionsContainer.innerHTML = dossier.collisions.map(c => `
+          <div onclick="openDrawer(${c.colliding_pr})" class="cursor-pointer bg-dark-950 p-2.5 rounded border border-slate-800 hover:border-slate-700 transition">
+            <div class="flex items-center justify-between">
+              <span class="font-mono font-bold text-cyan-400">PR #${c.colliding_pr}</span>
+              <span class="text-[10px] font-bold ${c.risk_level === 'CRITICAL' ? 'text-rose-400' : 'text-amber-400'}">${c.risk_level}</span>
+            </div>
+            <p class="text-[11px] text-slate-400 mt-1 truncate">Files: ${c.overlapping_files.map(f => f.split('/').pop()).join(', ')}</p>
+          </div>
+        `).join('');
+      } else {
+        collisionsContainer.innerHTML = '<span class="text-slate-500 italic text-xs">No file collisions detected</span>';
+      }
+
+      drawer.classList.remove('translate-x-full');
+    }
+
+    function closeDrawer() {
+      document.getElementById('dossierDrawer').classList.add('translate-x-full');
+      selectedPrNum = null;
+    }
+
+    // Startup
+    window.addEventListener('DOMContentLoaded', loadRadarData);
+  </script>
+</body>
+</html>

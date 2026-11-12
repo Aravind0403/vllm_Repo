@@ -1,0 +1,1870 @@
+{
+  "summary": {
+    "repo": "vllm-project/vllm",
+    "total_open_prs_analyzed": 40,
+    "status_breakdown": {
+      "WAITING_REVIEW": 12,
+      "CONFLICTING": 1,
+      "DRAFT": 5,
+      "CI_FAILURE": 18,
+      "BLOCKED_BY_DEP": 2,
+      "READY_TO_MERGE": 2
+    },
+    "foundational_unblockers": [
+      62750,
+      56606,
+      61779,
+      52838,
+      63675
+    ],
+    "dependency_stacks_count": 5,
+    "critical_file_collisions": 11,
+    "top_hotspot_files": [
+      {
+        "path": "vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py",
+        "pr_count": 4,
+        "churn": 606
+      },
+      {
+        "path": "vllm/v1/attention/backends/gdn_attn.py",
+        "pr_count": 3,
+        "churn": 452
+      },
+      {
+        "path": "vllm/model_executor/layers/attention/mla_attention.py",
+        "pr_count": 3,
+        "churn": 122
+      },
+      {
+        "path": "vllm/v1/core/sched/scheduler.py",
+        "pr_count": 3,
+        "churn": 69
+      },
+      {
+        "path": "tests/watermarking/watermarking_goldens.json",
+        "pr_count": 2,
+        "churn": 5447
+      }
+    ]
+  },
+  "prs": [
+    {
+      "number": 51406,
+      "title": "[ROCm] Enable fused QK-norm+RoPE+gate Triton kernel for Qwen3-Next/Qwen3.5",
+      "url": "https://github.com/vllm-project/vllm/pull/51406",
+      "author": "xuebwang",
+      "status": "WAITING_REVIEW",
+      "reason": "Approved with pending requirements",
+      "ci_status": "SUCCESS",
+      "review_decision": "APPROVED",
+      "mergeable": "UNKNOWN",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 2,
+      "collisions": []
+    },
+    {
+      "number": 52244,
+      "title": "[Bugfix][V1] Restore hybrid GDN prefix-cache hits under MTP spec decoding",
+      "url": "https://github.com/vllm-project/vllm/pull/52244",
+      "author": "Y-aang",
+      "status": "CONFLICTING",
+      "reason": "Merge conflict with base branch",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "CONFLICTING",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 6,
+      "collisions": [
+        {
+          "colliding_pr": 64927,
+          "risk_level": "MEDIUM",
+          "collision_score": 0.183,
+          "overlapping_files": [
+            "vllm/v1/core/sched/scheduler.py"
+          ]
+        },
+        {
+          "colliding_pr": 65399,
+          "risk_level": "MEDIUM",
+          "collision_score": 0.123,
+          "overlapping_files": [
+            "vllm/v1/core/sched/scheduler.py"
+          ]
+        }
+      ]
+    },
+    {
+      "number": 65398,
+      "title": "[Quantization] Add mxfp4_hadamard32_moe online quantization",
+      "url": "https://github.com/vllm-project/vllm/pull/65398",
+      "author": "mgoin",
+      "status": "DRAFT",
+      "reason": "Marked as draft / work in progress",
+      "ci_status": "PENDING",
+      "review_decision": "NONE",
+      "mergeable": "UNKNOWN",
+      "is_draft": true,
+      "staleness_days": 0.0,
+      "blocked_by": [
+        62750,
+        56606
+      ],
+      "blocks": [],
+      "files_changed_count": 21,
+      "collisions": [
+        {
+          "colliding_pr": 62093,
+          "risk_level": "LOW",
+          "collision_score": 0.057,
+          "overlapping_files": [
+            "vllm/platforms/rocm.py"
+          ]
+        },
+        {
+          "colliding_pr": 65143,
+          "risk_level": "LOW",
+          "collision_score": 0.045,
+          "overlapping_files": [
+            "vllm/model_executor/layers/quantization/base_config.py"
+          ]
+        }
+      ]
+    },
+    {
+      "number": 65305,
+      "title": "[Feature][PCP] Support DeepSeek V4 with FlashMLA on NVIDIA",
+      "url": "https://github.com/vllm-project/vllm/pull/65305",
+      "author": "pisceskkk",
+      "status": "DRAFT",
+      "reason": "Marked as draft / work in progress",
+      "ci_status": "FAILURE",
+      "review_decision": "NONE",
+      "mergeable": "MERGEABLE",
+      "is_draft": true,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 22,
+      "collisions": [
+        {
+          "colliding_pr": 63956,
+          "risk_level": "CRITICAL",
+          "collision_score": 0.431,
+          "overlapping_files": [
+            "vllm/model_executor/layers/sparse_attn_indexer.py",
+            "vllm/v1/attention/backends/mla/indexer.py"
+          ]
+        },
+        {
+          "colliding_pr": 62941,
+          "risk_level": "MEDIUM",
+          "collision_score": 0.088,
+          "overlapping_files": [
+            "vllm/v1/attention/backends/mla/sparse_swa.py"
+          ]
+        },
+        {
+          "colliding_pr": 64560,
+          "risk_level": "LOW",
+          "collision_score": 0.043,
+          "overlapping_files": [
+            "vllm/v1/attention/backend.py"
+          ]
+        }
+      ]
+    },
+    {
+      "number": 65403,
+      "title": "[Perf][Sparse MLA][GLM-5.3] Index-group workspace savings, indexer gate GEMM, opt-in masked-MHA prefill on quantized KV",
+      "url": "https://github.com/vllm-project/vllm/pull/65403",
+      "author": "gaby",
+      "status": "CI_FAILURE",
+      "reason": "CI checks are failing",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "MERGEABLE",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 19,
+      "collisions": [
+        {
+          "colliding_pr": 63956,
+          "risk_level": "CRITICAL",
+          "collision_score": 0.512,
+          "overlapping_files": [
+            "tests/v1/attention/test_sparse_mla_backends.py",
+            "vllm/config/attention.py",
+            "vllm/model_executor/layers/attention/mla_attention.py",
+            "vllm/model_executor/layers/attention/sparse_mla_attention.py",
+            "vllm/models/glm5next/common/attention.py",
+            "vllm/models/glm5next/common/model.py"
+          ]
+        },
+        {
+          "colliding_pr": 64560,
+          "risk_level": "CRITICAL",
+          "collision_score": 0.455,
+          "overlapping_files": [
+            "tests/v1/attention/test_mla_backends.py",
+            "vllm/model_executor/layers/attention/mla_attention.py"
+          ]
+        }
+      ]
+    },
+    {
+      "number": 63956,
+      "title": "[Perf][DSA] Token-sharded sparse-MLA prefill under TP; remove indexer row sharding",
+      "url": "https://github.com/vllm-project/vllm/pull/63956",
+      "author": "ZJY0516",
+      "status": "WAITING_REVIEW",
+      "reason": "Awaiting maintainer review",
+      "ci_status": "SUCCESS",
+      "review_decision": "NONE",
+      "mergeable": "MERGEABLE",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 19,
+      "collisions": [
+        {
+          "colliding_pr": 65403,
+          "risk_level": "CRITICAL",
+          "collision_score": 0.512,
+          "overlapping_files": [
+            "tests/v1/attention/test_sparse_mla_backends.py",
+            "vllm/config/attention.py",
+            "vllm/model_executor/layers/attention/mla_attention.py",
+            "vllm/model_executor/layers/attention/sparse_mla_attention.py",
+            "vllm/models/glm5next/common/attention.py",
+            "vllm/models/glm5next/common/model.py"
+          ]
+        },
+        {
+          "colliding_pr": 65305,
+          "risk_level": "CRITICAL",
+          "collision_score": 0.431,
+          "overlapping_files": [
+            "vllm/model_executor/layers/sparse_attn_indexer.py",
+            "vllm/v1/attention/backends/mla/indexer.py"
+          ]
+        },
+        {
+          "colliding_pr": 64560,
+          "risk_level": "HIGH",
+          "collision_score": 0.214,
+          "overlapping_files": [
+            "vllm/model_executor/layers/attention/mla_attention.py"
+          ]
+        }
+      ]
+    },
+    {
+      "number": 63086,
+      "title": "[ROCm][Kimi-K3] Enable encoder graph capture for Kimi-K3 Vision Tower",
+      "url": "https://github.com/vllm-project/vllm/pull/63086",
+      "author": "samutamm",
+      "status": "WAITING_REVIEW",
+      "reason": "Awaiting maintainer review",
+      "ci_status": "PENDING",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "UNKNOWN",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 2,
+      "collisions": []
+    },
+    {
+      "number": 64927,
+      "title": "[Core][Scheduler] Add an opt-in time-bounded prefill hold",
+      "url": "https://github.com/vllm-project/vllm/pull/64927",
+      "author": "vorapolsiloai",
+      "status": "DRAFT",
+      "reason": "Marked as draft / work in progress",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "UNKNOWN",
+      "is_draft": true,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 3,
+      "collisions": [
+        {
+          "colliding_pr": 65399,
+          "risk_level": "CRITICAL",
+          "collision_score": 0.64,
+          "overlapping_files": [
+            "tests/v1/core/test_scheduler.py",
+            "vllm/v1/core/sched/scheduler.py"
+          ]
+        },
+        {
+          "colliding_pr": 52244,
+          "risk_level": "MEDIUM",
+          "collision_score": 0.183,
+          "overlapping_files": [
+            "vllm/v1/core/sched/scheduler.py"
+          ]
+        },
+        {
+          "colliding_pr": 62941,
+          "risk_level": "MEDIUM",
+          "collision_score": 0.127,
+          "overlapping_files": [
+            "vllm/envs.py"
+          ]
+        }
+      ]
+    },
+    {
+      "number": 61952,
+      "title": "[Perf][GDN] Capture the GDN core in breakable CUDA graphs of mixed batches (CUDA graph 2/2)",
+      "url": "https://github.com/vllm-project/vllm/pull/61952",
+      "author": "kimseunghyun-kr",
+      "status": "BLOCKED_BY_DEP",
+      "reason": "Blocked on open dependency: #61779",
+      "ci_status": "SUCCESS",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "UNKNOWN",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [
+        61779
+      ],
+      "blocks": [],
+      "files_changed_count": 18,
+      "collisions": [
+        {
+          "colliding_pr": 63284,
+          "risk_level": "CRITICAL",
+          "collision_score": 0.457,
+          "overlapping_files": [
+            "vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py",
+            "vllm/v1/attention/backends/gdn_attn.py"
+          ]
+        },
+        {
+          "colliding_pr": 56307,
+          "risk_level": "CRITICAL",
+          "collision_score": 0.441,
+          "overlapping_files": [
+            "vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py",
+            "vllm/v1/attention/backends/gdn_attn.py"
+          ]
+        },
+        {
+          "colliding_pr": 64621,
+          "risk_level": "CRITICAL",
+          "collision_score": 0.433,
+          "overlapping_files": [
+            "vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py"
+          ]
+        },
+        {
+          "colliding_pr": 63676,
+          "risk_level": "MEDIUM",
+          "collision_score": 0.068,
+          "overlapping_files": [
+            "vllm/v1/attention/backends/utils.py"
+          ]
+        }
+      ]
+    },
+    {
+      "number": 51156,
+      "title": "[Bugfix][Spec Decode] Bound draft max_model_len by the target before logging",
+      "url": "https://github.com/vllm-project/vllm/pull/51156",
+      "author": "adityasingh2400",
+      "status": "CI_FAILURE",
+      "reason": "CI checks are failing",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "MERGEABLE",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 2,
+      "collisions": [
+        {
+          "colliding_pr": 58426,
+          "risk_level": "MEDIUM",
+          "collision_score": 0.144,
+          "overlapping_files": [
+            "tests/test_config.py"
+          ]
+        }
+      ]
+    },
+    {
+      "number": 43548,
+      "title": "[Bugfix] Expand YAML config when passed as `--config=<path>`",
+      "url": "https://github.com/vllm-project/vllm/pull/43548",
+      "author": "adityasingh2400",
+      "status": "CI_FAILURE",
+      "reason": "CI checks are failing",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "UNKNOWN",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 2,
+      "collisions": []
+    },
+    {
+      "number": 56451,
+      "title": "[ROCm][Spec Decode] Enable adaptive DSpark verification for MiniMax M3",
+      "url": "https://github.com/vllm-project/vllm/pull/56451",
+      "author": "olka-amd",
+      "status": "WAITING_REVIEW",
+      "reason": "Awaiting maintainer review",
+      "ci_status": "PENDING",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "MERGEABLE",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 13,
+      "collisions": []
+    },
+    {
+      "number": 65076,
+      "title": "[KVConnector][Mooncake] Add per-GPU device names for MooncakeStoreConnector",
+      "url": "https://github.com/vllm-project/vllm/pull/65076",
+      "author": "whx-sjtu",
+      "status": "READY_TO_MERGE",
+      "reason": "Approved, waiting for CI completion",
+      "ci_status": "PENDING",
+      "review_decision": "APPROVED",
+      "mergeable": "MERGEABLE",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 4,
+      "collisions": []
+    },
+    {
+      "number": 64624,
+      "title": "[Hybrid] Round the attention block size up to prefix_match_unit",
+      "url": "https://github.com/vllm-project/vllm/pull/64624",
+      "author": "emmericp",
+      "status": "CI_FAILURE",
+      "reason": "CI checks are failing",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "MERGEABLE",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 3,
+      "collisions": [
+        {
+          "colliding_pr": 65402,
+          "risk_level": "MEDIUM",
+          "collision_score": 0.242,
+          "overlapping_files": [
+            "tests/v1/worker/test_gpu_model_runner.py"
+          ]
+        }
+      ]
+    },
+    {
+      "number": 62941,
+      "title": "[Perf][DSv4.1] Pack DSpark verify positions into one FlashMLA head tile on SM90",
+      "url": "https://github.com/vllm-project/vllm/pull/62941",
+      "author": "luoyuctl",
+      "status": "DRAFT",
+      "reason": "Marked as draft / work in progress",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "UNKNOWN",
+      "is_draft": true,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 6,
+      "collisions": [
+        {
+          "colliding_pr": 59418,
+          "risk_level": "CRITICAL",
+          "collision_score": 0.533,
+          "overlapping_files": [
+            "tests/kernels/attention/test_flashmla_sparse.py",
+            "vllm/models/deepseek_v41/nvidia/flashmla.py"
+          ]
+        },
+        {
+          "colliding_pr": 64927,
+          "risk_level": "MEDIUM",
+          "collision_score": 0.127,
+          "overlapping_files": [
+            "vllm/envs.py"
+          ]
+        },
+        {
+          "colliding_pr": 65305,
+          "risk_level": "MEDIUM",
+          "collision_score": 0.088,
+          "overlapping_files": [
+            "vllm/v1/attention/backends/mla/sparse_swa.py"
+          ]
+        }
+      ]
+    },
+    {
+      "number": 59418,
+      "title": "[Perf][DSv4.1] Small-head sparse decode on SM90",
+      "url": "https://github.com/vllm-project/vllm/pull/59418",
+      "author": "luoyuctl",
+      "status": "WAITING_REVIEW",
+      "reason": "Awaiting maintainer review",
+      "ci_status": "SUCCESS",
+      "review_decision": "NONE",
+      "mergeable": "UNKNOWN",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 5,
+      "collisions": [
+        {
+          "colliding_pr": 62941,
+          "risk_level": "CRITICAL",
+          "collision_score": 0.533,
+          "overlapping_files": [
+            "tests/kernels/attention/test_flashmla_sparse.py",
+            "vllm/models/deepseek_v41/nvidia/flashmla.py"
+          ]
+        },
+        {
+          "colliding_pr": 64765,
+          "risk_level": "LOW",
+          "collision_score": 0.043,
+          "overlapping_files": [
+            ".buildkite/test_areas/kernels.yaml"
+          ]
+        }
+      ]
+    },
+    {
+      "number": 57292,
+      "title": "[Bugfix][DSv4.1] Fail fast on SM120 when FlashInfer lacks runtime page sizes",
+      "url": "https://github.com/vllm-project/vllm/pull/57292",
+      "author": "luoyuctl",
+      "status": "CI_FAILURE",
+      "reason": "CI checks are failing",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "UNKNOWN",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 3,
+      "collisions": [
+        {
+          "colliding_pr": 63284,
+          "risk_level": "MEDIUM",
+          "collision_score": 0.164,
+          "overlapping_files": [
+            "vllm/utils/flashinfer.py"
+          ]
+        }
+      ]
+    },
+    {
+      "number": 64620,
+      "title": "[MoE] Load fused expert weights with one weight_loader call per shard",
+      "url": "https://github.com/vllm-project/vllm/pull/64620",
+      "author": "emmericp",
+      "status": "CI_FAILURE",
+      "reason": "CI checks are failing",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "UNKNOWN",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 3,
+      "collisions": []
+    },
+    {
+      "number": 65402,
+      "title": "[Bugfix][MRv1][Spec Decode] Count NaNs in logits per request, not per logits row",
+      "url": "https://github.com/vllm-project/vllm/pull/65402",
+      "author": "DemisEom",
+      "status": "CI_FAILURE",
+      "reason": "CI checks are failing",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "MERGEABLE",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 2,
+      "collisions": [
+        {
+          "colliding_pr": 64624,
+          "risk_level": "MEDIUM",
+          "collision_score": 0.242,
+          "overlapping_files": [
+            "tests/v1/worker/test_gpu_model_runner.py"
+          ]
+        },
+        {
+          "colliding_pr": 65395,
+          "risk_level": "MEDIUM",
+          "collision_score": 0.216,
+          "overlapping_files": [
+            "vllm/v1/worker/gpu_model_runner.py"
+          ]
+        }
+      ]
+    },
+    {
+      "number": 58426,
+      "title": "[Feature][Core] Add native SynthID-Text watermarking",
+      "url": "https://github.com/vllm-project/vllm/pull/58426",
+      "author": "sebfelix",
+      "status": "CI_FAILURE",
+      "reason": "CI checks are failing",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "UNKNOWN",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 19,
+      "collisions": [
+        {
+          "colliding_pr": 56859,
+          "risk_level": "CRITICAL",
+          "collision_score": 0.7,
+          "overlapping_files": [
+            "docs/features/watermarking.md",
+            "tests/watermarking/golden_candidates.py",
+            "tests/watermarking/test_watermarking.py",
+            "tests/watermarking/test_watermarking_e2e.py",
+            "tests/watermarking/watermarking_goldens.json",
+            "vllm/config/vllm.py",
+            "vllm/config/watermarking.py",
+            "vllm/v1/watermarking/__init__.py",
+            "vllm/v1/watermarking/factory.py",
+            "vllm/v1/watermarking/gumbel.py",
+            "vllm/v1/watermarking/watermarker.py"
+          ]
+        },
+        {
+          "colliding_pr": 51156,
+          "risk_level": "MEDIUM",
+          "collision_score": 0.144,
+          "overlapping_files": [
+            "tests/test_config.py"
+          ]
+        }
+      ]
+    },
+    {
+      "number": 64621,
+      "title": "[Perf][GDN] Use FlashInfer's regular prefill route for short batches",
+      "url": "https://github.com/vllm-project/vllm/pull/64621",
+      "author": "emmericp",
+      "status": "READY_TO_MERGE",
+      "reason": "Approved, waiting for CI completion",
+      "ci_status": "PENDING",
+      "review_decision": "APPROVED",
+      "mergeable": "UNKNOWN",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 1,
+      "collisions": [
+        {
+          "colliding_pr": 63284,
+          "risk_level": "CRITICAL",
+          "collision_score": 0.52,
+          "overlapping_files": [
+            "vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py"
+          ]
+        },
+        {
+          "colliding_pr": 61952,
+          "risk_level": "CRITICAL",
+          "collision_score": 0.433,
+          "overlapping_files": [
+            "vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py"
+          ]
+        },
+        {
+          "colliding_pr": 56307,
+          "risk_level": "HIGH",
+          "collision_score": 0.31,
+          "overlapping_files": [
+            "vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py"
+          ]
+        }
+      ]
+    },
+    {
+      "number": 65400,
+      "title": "[Recipe] Kimi-K3, MiniMax-M3.1-Flash: add Rubin VR200 support",
+      "url": "https://github.com/vllm-project/vllm/pull/65400",
+      "author": "esmeetu",
+      "status": "WAITING_REVIEW",
+      "reason": "Awaiting maintainer review",
+      "ci_status": "PENDING",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "UNKNOWN",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 2,
+      "collisions": []
+    },
+    {
+      "number": 65143,
+      "title": "[Metrics][Quantization] Let quantization configs report weight bytes for MFU",
+      "url": "https://github.com/vllm-project/vllm/pull/65143",
+      "author": "varad-more",
+      "status": "CI_FAILURE",
+      "reason": "CI checks are failing",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "UNKNOWN",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 4,
+      "collisions": [
+        {
+          "colliding_pr": 65398,
+          "risk_level": "LOW",
+          "collision_score": 0.045,
+          "overlapping_files": [
+            "vllm/model_executor/layers/quantization/base_config.py"
+          ]
+        }
+      ]
+    },
+    {
+      "number": 63284,
+      "title": "[Kernel] Separate what the GDN prefill selector can run from what it prefers",
+      "url": "https://github.com/vllm-project/vllm/pull/63284",
+      "author": "lesj0610",
+      "status": "WAITING_REVIEW",
+      "reason": "Awaiting maintainer review",
+      "ci_status": "SUCCESS",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "MERGEABLE",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 5,
+      "collisions": [
+        {
+          "colliding_pr": 64621,
+          "risk_level": "CRITICAL",
+          "collision_score": 0.52,
+          "overlapping_files": [
+            "vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py"
+          ]
+        },
+        {
+          "colliding_pr": 56307,
+          "risk_level": "CRITICAL",
+          "collision_score": 0.475,
+          "overlapping_files": [
+            "vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py",
+            "vllm/v1/attention/backends/gdn_attn.py"
+          ]
+        },
+        {
+          "colliding_pr": 61952,
+          "risk_level": "CRITICAL",
+          "collision_score": 0.457,
+          "overlapping_files": [
+            "vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py",
+            "vllm/v1/attention/backends/gdn_attn.py"
+          ]
+        },
+        {
+          "colliding_pr": 57292,
+          "risk_level": "MEDIUM",
+          "collision_score": 0.164,
+          "overlapping_files": [
+            "vllm/utils/flashinfer.py"
+          ]
+        }
+      ]
+    },
+    {
+      "number": 56307,
+      "title": "[ROCm][Kernel] New \"hip\" GDN backend for gfx1151",
+      "url": "https://github.com/vllm-project/vllm/pull/56307",
+      "author": "roberteg16",
+      "status": "CI_FAILURE",
+      "reason": "CI checks are failing",
+      "ci_status": "FAILURE",
+      "review_decision": "APPROVED",
+      "mergeable": "UNKNOWN",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 13,
+      "collisions": [
+        {
+          "colliding_pr": 63284,
+          "risk_level": "CRITICAL",
+          "collision_score": 0.475,
+          "overlapping_files": [
+            "vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py",
+            "vllm/v1/attention/backends/gdn_attn.py"
+          ]
+        },
+        {
+          "colliding_pr": 61952,
+          "risk_level": "CRITICAL",
+          "collision_score": 0.441,
+          "overlapping_files": [
+            "vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py",
+            "vllm/v1/attention/backends/gdn_attn.py"
+          ]
+        },
+        {
+          "colliding_pr": 64621,
+          "risk_level": "HIGH",
+          "collision_score": 0.31,
+          "overlapping_files": [
+            "vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py"
+          ]
+        }
+      ]
+    },
+    {
+      "number": 64522,
+      "title": "[CPU] Warm up the remaining sampling kernels before serving",
+      "url": "https://github.com/vllm-project/vllm/pull/64522",
+      "author": "ganeshr10",
+      "status": "WAITING_REVIEW",
+      "reason": "Awaiting maintainer review",
+      "ci_status": "SUCCESS",
+      "review_decision": "NONE",
+      "mergeable": "UNKNOWN",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 8,
+      "collisions": []
+    },
+    {
+      "number": 56859,
+      "title": "[watermarking] Add SBW (Stateless Bernoulli Watermarking) algorithm",
+      "url": "https://github.com/vllm-project/vllm/pull/56859",
+      "author": "si-mon-jinn",
+      "status": "CI_FAILURE",
+      "reason": "CI checks are failing",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "UNKNOWN",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 14,
+      "collisions": [
+        {
+          "colliding_pr": 58426,
+          "risk_level": "CRITICAL",
+          "collision_score": 0.7,
+          "overlapping_files": [
+            "docs/features/watermarking.md",
+            "tests/watermarking/golden_candidates.py",
+            "tests/watermarking/test_watermarking.py",
+            "tests/watermarking/test_watermarking_e2e.py",
+            "tests/watermarking/watermarking_goldens.json",
+            "vllm/config/vllm.py",
+            "vllm/config/watermarking.py",
+            "vllm/v1/watermarking/__init__.py",
+            "vllm/v1/watermarking/factory.py",
+            "vllm/v1/watermarking/gumbel.py",
+            "vllm/v1/watermarking/watermarker.py"
+          ]
+        }
+      ]
+    },
+    {
+      "number": 65395,
+      "title": "[Perf][Attention] Cache FlexAttention K/V cache views per tensor",
+      "url": "https://github.com/vllm-project/vllm/pull/65395",
+      "author": "selimfedakar",
+      "status": "CI_FAILURE",
+      "reason": "CI checks are failing",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "UNKNOWN",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 4,
+      "collisions": [
+        {
+          "colliding_pr": 65402,
+          "risk_level": "MEDIUM",
+          "collision_score": 0.216,
+          "overlapping_files": [
+            "vllm/v1/worker/gpu_model_runner.py"
+          ]
+        }
+      ]
+    },
+    {
+      "number": 62933,
+      "title": "[KV Offload] Mirror CPU offload region slots across nodes",
+      "url": "https://github.com/vllm-project/vllm/pull/62933",
+      "author": "javieratomic",
+      "status": "CI_FAILURE",
+      "reason": "CI checks are failing",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "MERGEABLE",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 18,
+      "collisions": []
+    },
+    {
+      "number": 65399,
+      "title": "[Bugfix][Scheduler] Respect disabled chunked prefill for multimodal requests",
+      "url": "https://github.com/vllm-project/vllm/pull/65399",
+      "author": "jzakrzew",
+      "status": "WAITING_REVIEW",
+      "reason": "Awaiting maintainer review",
+      "ci_status": "PENDING",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "UNKNOWN",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 4,
+      "collisions": [
+        {
+          "colliding_pr": 64927,
+          "risk_level": "CRITICAL",
+          "collision_score": 0.64,
+          "overlapping_files": [
+            "tests/v1/core/test_scheduler.py",
+            "vllm/v1/core/sched/scheduler.py"
+          ]
+        },
+        {
+          "colliding_pr": 52244,
+          "risk_level": "MEDIUM",
+          "collision_score": 0.123,
+          "overlapping_files": [
+            "vllm/v1/core/sched/scheduler.py"
+          ]
+        }
+      ]
+    },
+    {
+      "number": 65394,
+      "title": "[Bugfix][Quantization] Honor the activation scheme in MXFP8 linear kernel selection",
+      "url": "https://github.com/vllm-project/vllm/pull/65394",
+      "author": "selimfedakar",
+      "status": "CI_FAILURE",
+      "reason": "CI checks are failing",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "MERGEABLE",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 7,
+      "collisions": []
+    },
+    {
+      "number": 62093,
+      "title": "[ROCm] do not blindly pick gpu 0 for asic info, consider *_VISIBLE_DEVICES",
+      "url": "https://github.com/vllm-project/vllm/pull/62093",
+      "author": "Kezii",
+      "status": "CI_FAILURE",
+      "reason": "CI checks are failing",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "UNKNOWN",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 1,
+      "collisions": [
+        {
+          "colliding_pr": 65398,
+          "risk_level": "LOW",
+          "collision_score": 0.057,
+          "overlapping_files": [
+            "vllm/platforms/rocm.py"
+          ]
+        }
+      ]
+    },
+    {
+      "number": 64560,
+      "title": "[ROCm][Perf][MLA] Fuse the decode W_UK absorb, q concat + fp8 quant and head pad via AITER",
+      "url": "https://github.com/vllm-project/vllm/pull/64560",
+      "author": "lucas-santos-amd",
+      "status": "DRAFT",
+      "reason": "Marked as draft / work in progress",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "UNKNOWN",
+      "is_draft": true,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 5,
+      "collisions": [
+        {
+          "colliding_pr": 65403,
+          "risk_level": "CRITICAL",
+          "collision_score": 0.455,
+          "overlapping_files": [
+            "tests/v1/attention/test_mla_backends.py",
+            "vllm/model_executor/layers/attention/mla_attention.py"
+          ]
+        },
+        {
+          "colliding_pr": 63956,
+          "risk_level": "HIGH",
+          "collision_score": 0.214,
+          "overlapping_files": [
+            "vllm/model_executor/layers/attention/mla_attention.py"
+          ]
+        },
+        {
+          "colliding_pr": 65305,
+          "risk_level": "LOW",
+          "collision_score": 0.043,
+          "overlapping_files": [
+            "vllm/v1/attention/backend.py"
+          ]
+        }
+      ]
+    },
+    {
+      "number": 63874,
+      "title": "[Bugfix][Distributed] Release FlashInfer one-sided workspaces on teardown",
+      "url": "https://github.com/vllm-project/vllm/pull/63874",
+      "author": "WoosukKwon",
+      "status": "WAITING_REVIEW",
+      "reason": "Awaiting maintainer review",
+      "ci_status": "SUCCESS",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "UNKNOWN",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 3,
+      "collisions": []
+    },
+    {
+      "number": 64765,
+      "title": "[Misc] Use the b12x package shipped with flashinfer-python",
+      "url": "https://github.com/vllm-project/vllm/pull/64765",
+      "author": "stecasta",
+      "status": "WAITING_REVIEW",
+      "reason": "Awaiting maintainer review",
+      "ci_status": "SUCCESS",
+      "review_decision": "NONE",
+      "mergeable": "UNKNOWN",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 12,
+      "collisions": [
+        {
+          "colliding_pr": 59418,
+          "risk_level": "LOW",
+          "collision_score": 0.043,
+          "overlapping_files": [
+            ".buildkite/test_areas/kernels.yaml"
+          ]
+        }
+      ]
+    },
+    {
+      "number": 55993,
+      "title": "[Examples] Fix ghost demo.py Usage in offline LLM examples",
+      "url": "https://github.com/vllm-project/vllm/pull/55993",
+      "author": "imitater-dou",
+      "status": "CI_FAILURE",
+      "reason": "CI checks are failing",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "UNKNOWN",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 2,
+      "collisions": []
+    },
+    {
+      "number": 63909,
+      "title": "[Bugfix][Spec Decode] Propagate dictionary hf-overrides to speculative draft models",
+      "url": "https://github.com/vllm-project/vllm/pull/63909",
+      "author": "cnsiva",
+      "status": "CI_FAILURE",
+      "reason": "CI checks are failing",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "MERGEABLE",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 3,
+      "collisions": []
+    },
+    {
+      "number": 65343,
+      "title": "[Bugfix][Core] Bound local RPC ring-slot wait by deadline",
+      "url": "https://github.com/vllm-project/vllm/pull/65343",
+      "author": "uzunenes",
+      "status": "CI_FAILURE",
+      "reason": "CI checks are failing",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "UNKNOWN",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 4,
+      "collisions": []
+    },
+    {
+      "number": 63676,
+      "title": "[Bugfix][ROCm] Keep extend context when model runner v2 reorders the batch",
+      "url": "https://github.com/vllm-project/vllm/pull/63676",
+      "author": "tjtanaa",
+      "status": "BLOCKED_BY_DEP",
+      "reason": "Blocked on open dependency: #63675",
+      "ci_status": "FAILURE",
+      "review_decision": "NONE",
+      "mergeable": "UNKNOWN",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [
+        63675
+      ],
+      "blocks": [],
+      "files_changed_count": 25,
+      "collisions": [
+        {
+          "colliding_pr": 61952,
+          "risk_level": "MEDIUM",
+          "collision_score": 0.068,
+          "overlapping_files": [
+            "vllm/v1/attention/backends/utils.py"
+          ]
+        }
+      ]
+    },
+    {
+      "number": 62729,
+      "title": "[Bugfix] Honor add_generation_prompt and continue_final_message in the DeepSeek V4.1 tokenizer",
+      "url": "https://github.com/vllm-project/vllm/pull/62729",
+      "author": "JohnZhao01",
+      "status": "WAITING_REVIEW",
+      "reason": "Awaiting maintainer review",
+      "ci_status": "SUCCESS",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "UNKNOWN",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 5,
+      "collisions": []
+    }
+  ],
+  "hotspots": [
+    {
+      "path": "vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py",
+      "open_pr_count": 4,
+      "pr_numbers": [
+        56307,
+        61952,
+        63284,
+        64621
+      ],
+      "total_churn": 606
+    },
+    {
+      "path": "vllm/v1/attention/backends/gdn_attn.py",
+      "open_pr_count": 3,
+      "pr_numbers": [
+        56307,
+        61952,
+        63284
+      ],
+      "total_churn": 452
+    },
+    {
+      "path": "vllm/model_executor/layers/attention/mla_attention.py",
+      "open_pr_count": 3,
+      "pr_numbers": [
+        63956,
+        64560,
+        65403
+      ],
+      "total_churn": 122
+    },
+    {
+      "path": "vllm/v1/core/sched/scheduler.py",
+      "open_pr_count": 3,
+      "pr_numbers": [
+        52244,
+        64927,
+        65399
+      ],
+      "total_churn": 69
+    },
+    {
+      "path": "tests/watermarking/watermarking_goldens.json",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        56859,
+        58426
+      ],
+      "total_churn": 5447
+    },
+    {
+      "path": "tests/kernels/attention/test_flashmla_sparse.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        59418,
+        62941
+      ],
+      "total_churn": 384
+    },
+    {
+      "path": "vllm/models/deepseek_v41/nvidia/flashmla.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        59418,
+        62941
+      ],
+      "total_churn": 185
+    },
+    {
+      "path": "vllm/v1/attention/backends/mla/indexer.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        63956,
+        65305
+      ],
+      "total_churn": 184
+    },
+    {
+      "path": "tests/v1/core/test_scheduler.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        64927,
+        65399
+      ],
+      "total_churn": 166
+    },
+    {
+      "path": "vllm/model_executor/layers/attention/sparse_mla_attention.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        63956,
+        65403
+      ],
+      "total_churn": 158
+    },
+    {
+      "path": "tests/v1/attention/test_mla_backends.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        64560,
+        65403
+      ],
+      "total_churn": 137
+    },
+    {
+      "path": "vllm/model_executor/layers/sparse_attn_indexer.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        63956,
+        65305
+      ],
+      "total_churn": 122
+    },
+    {
+      "path": "tests/watermarking/golden_candidates.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        56859,
+        58426
+      ],
+      "total_churn": 121
+    },
+    {
+      "path": "docs/features/watermarking.md",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        56859,
+        58426
+      ],
+      "total_churn": 113
+    },
+    {
+      "path": "tests/watermarking/test_watermarking_e2e.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        56859,
+        58426
+      ],
+      "total_churn": 74
+    },
+    {
+      "path": "tests/v1/attention/test_sparse_mla_backends.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        63956,
+        65403
+      ],
+      "total_churn": 59
+    },
+    {
+      "path": "tests/test_config.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        51156,
+        58426
+      ],
+      "total_churn": 57
+    },
+    {
+      "path": "vllm/config/watermarking.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        56859,
+        58426
+      ],
+      "total_churn": 51
+    },
+    {
+      "path": "vllm/v1/worker/gpu_model_runner.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        65395,
+        65402
+      ],
+      "total_churn": 48
+    },
+    {
+      "path": "tests/v1/worker/test_gpu_model_runner.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        64624,
+        65402
+      ],
+      "total_churn": 46
+    },
+    {
+      "path": "vllm/config/attention.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        63956,
+        65403
+      ],
+      "total_churn": 42
+    },
+    {
+      "path": "vllm/models/glm5next/common/attention.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        63956,
+        65403
+      ],
+      "total_churn": 42
+    },
+    {
+      "path": "vllm/utils/flashinfer.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        57292,
+        63284
+      ],
+      "total_churn": 39
+    },
+    {
+      "path": "vllm/v1/attention/backends/mla/sparse_swa.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        62941,
+        65305
+      ],
+      "total_churn": 33
+    },
+    {
+      "path": "vllm/v1/attention/backends/utils.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        61952,
+        63676
+      ],
+      "total_churn": 27
+    },
+    {
+      "path": "vllm/envs.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        62941,
+        64927
+      ],
+      "total_churn": 26
+    },
+    {
+      "path": "vllm/v1/watermarking/watermarker.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        56859,
+        58426
+      ],
+      "total_churn": 24
+    },
+    {
+      "path": "tests/watermarking/test_watermarking.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        56859,
+        58426
+      ],
+      "total_churn": 19
+    },
+    {
+      "path": "vllm/models/glm5next/common/model.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        63956,
+        65403
+      ],
+      "total_churn": 18
+    },
+    {
+      "path": "vllm/v1/watermarking/factory.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        56859,
+        58426
+      ],
+      "total_churn": 17
+    },
+    {
+      "path": "vllm/platforms/rocm.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        62093,
+        65398
+      ],
+      "total_churn": 14
+    },
+    {
+      "path": "vllm/v1/watermarking/gumbel.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        56859,
+        58426
+      ],
+      "total_churn": 14
+    },
+    {
+      "path": "vllm/config/vllm.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        56859,
+        58426
+      ],
+      "total_churn": 11
+    },
+    {
+      "path": "vllm/model_executor/layers/quantization/base_config.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        65143,
+        65398
+      ],
+      "total_churn": 10
+    },
+    {
+      "path": "vllm/v1/attention/backend.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        64560,
+        65305
+      ],
+      "total_churn": 10
+    },
+    {
+      "path": "vllm/v1/watermarking/__init__.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        56859,
+        58426
+      ],
+      "total_churn": 9
+    },
+    {
+      "path": ".buildkite/test_areas/kernels.yaml",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        59418,
+        64765
+      ],
+      "total_churn": 3
+    }
+  ],
+  "collisions": [
+    {
+      "pr_a": 58426,
+      "pr_b": 56859,
+      "overlapping_files": [
+        "docs/features/watermarking.md",
+        "tests/watermarking/golden_candidates.py",
+        "tests/watermarking/test_watermarking.py",
+        "tests/watermarking/test_watermarking_e2e.py",
+        "tests/watermarking/watermarking_goldens.json",
+        "vllm/config/vllm.py",
+        "vllm/config/watermarking.py",
+        "vllm/v1/watermarking/__init__.py",
+        "vllm/v1/watermarking/factory.py",
+        "vllm/v1/watermarking/gumbel.py",
+        "vllm/v1/watermarking/watermarker.py"
+      ],
+      "collision_score": 0.7,
+      "risk_level": "CRITICAL",
+      "shared_churn": 5900
+    },
+    {
+      "pr_a": 64927,
+      "pr_b": 65399,
+      "overlapping_files": [
+        "tests/v1/core/test_scheduler.py",
+        "vllm/v1/core/sched/scheduler.py"
+      ],
+      "collision_score": 0.64,
+      "risk_level": "CRITICAL",
+      "shared_churn": 222
+    },
+    {
+      "pr_a": 62941,
+      "pr_b": 59418,
+      "overlapping_files": [
+        "tests/kernels/attention/test_flashmla_sparse.py",
+        "vllm/models/deepseek_v41/nvidia/flashmla.py"
+      ],
+      "collision_score": 0.533,
+      "risk_level": "CRITICAL",
+      "shared_churn": 569
+    },
+    {
+      "pr_a": 64621,
+      "pr_b": 63284,
+      "overlapping_files": [
+        "vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py"
+      ],
+      "collision_score": 0.52,
+      "risk_level": "CRITICAL",
+      "shared_churn": 211
+    },
+    {
+      "pr_a": 65403,
+      "pr_b": 63956,
+      "overlapping_files": [
+        "tests/v1/attention/test_sparse_mla_backends.py",
+        "vllm/config/attention.py",
+        "vllm/model_executor/layers/attention/mla_attention.py",
+        "vllm/model_executor/layers/attention/sparse_mla_attention.py",
+        "vllm/models/glm5next/common/attention.py",
+        "vllm/models/glm5next/common/model.py"
+      ],
+      "collision_score": 0.512,
+      "risk_level": "CRITICAL",
+      "shared_churn": 388
+    },
+    {
+      "pr_a": 63284,
+      "pr_b": 56307,
+      "overlapping_files": [
+        "vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py",
+        "vllm/v1/attention/backends/gdn_attn.py"
+      ],
+      "collision_score": 0.475,
+      "risk_level": "CRITICAL",
+      "shared_churn": 340
+    },
+    {
+      "pr_a": 61952,
+      "pr_b": 63284,
+      "overlapping_files": [
+        "vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py",
+        "vllm/v1/attention/backends/gdn_attn.py"
+      ],
+      "collision_score": 0.457,
+      "risk_level": "CRITICAL",
+      "shared_churn": 924
+    },
+    {
+      "pr_a": 65403,
+      "pr_b": 64560,
+      "overlapping_files": [
+        "tests/v1/attention/test_mla_backends.py",
+        "vllm/model_executor/layers/attention/mla_attention.py"
+      ],
+      "collision_score": 0.455,
+      "risk_level": "CRITICAL",
+      "shared_churn": 218
+    },
+    {
+      "pr_a": 61952,
+      "pr_b": 56307,
+      "overlapping_files": [
+        "vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py",
+        "vllm/v1/attention/backends/gdn_attn.py"
+      ],
+      "collision_score": 0.441,
+      "risk_level": "CRITICAL",
+      "shared_churn": 830
+    },
+    {
+      "pr_a": 61952,
+      "pr_b": 64621,
+      "overlapping_files": [
+        "vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py"
+      ],
+      "collision_score": 0.433,
+      "risk_level": "CRITICAL",
+      "shared_churn": 285
+    },
+    {
+      "pr_a": 65305,
+      "pr_b": 63956,
+      "overlapping_files": [
+        "vllm/model_executor/layers/sparse_attn_indexer.py",
+        "vllm/v1/attention/backends/mla/indexer.py"
+      ],
+      "collision_score": 0.431,
+      "risk_level": "CRITICAL",
+      "shared_churn": 306
+    },
+    {
+      "pr_a": 64621,
+      "pr_b": 56307,
+      "overlapping_files": [
+        "vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py"
+      ],
+      "collision_score": 0.31,
+      "risk_level": "HIGH",
+      "shared_churn": 132
+    },
+    {
+      "pr_a": 63956,
+      "pr_b": 64560,
+      "overlapping_files": [
+        "vllm/model_executor/layers/attention/mla_attention.py"
+      ],
+      "collision_score": 0.214,
+      "risk_level": "HIGH",
+      "shared_churn": 94
+    },
+    {
+      "pr_a": 64624,
+      "pr_b": 65402,
+      "overlapping_files": [
+        "tests/v1/worker/test_gpu_model_runner.py"
+      ],
+      "collision_score": 0.242,
+      "risk_level": "MEDIUM",
+      "shared_churn": 46
+    },
+    {
+      "pr_a": 65402,
+      "pr_b": 65395,
+      "overlapping_files": [
+        "vllm/v1/worker/gpu_model_runner.py"
+      ],
+      "collision_score": 0.216,
+      "risk_level": "MEDIUM",
+      "shared_churn": 48
+    },
+    {
+      "pr_a": 52244,
+      "pr_b": 64927,
+      "overlapping_files": [
+        "vllm/v1/core/sched/scheduler.py"
+      ],
+      "collision_score": 0.183,
+      "risk_level": "MEDIUM",
+      "shared_churn": 54
+    },
+    {
+      "pr_a": 57292,
+      "pr_b": 63284,
+      "overlapping_files": [
+        "vllm/utils/flashinfer.py"
+      ],
+      "collision_score": 0.164,
+      "risk_level": "MEDIUM",
+      "shared_churn": 39
+    },
+    {
+      "pr_a": 51156,
+      "pr_b": 58426,
+      "overlapping_files": [
+        "tests/test_config.py"
+      ],
+      "collision_score": 0.144,
+      "risk_level": "MEDIUM",
+      "shared_churn": 57
+    },
+    {
+      "pr_a": 64927,
+      "pr_b": 62941,
+      "overlapping_files": [
+        "vllm/envs.py"
+      ],
+      "collision_score": 0.127,
+      "risk_level": "MEDIUM",
+      "shared_churn": 26
+    },
+    {
+      "pr_a": 52244,
+      "pr_b": 65399,
+      "overlapping_files": [
+        "vllm/v1/core/sched/scheduler.py"
+      ],
+      "collision_score": 0.123,
+      "risk_level": "MEDIUM",
+      "shared_churn": 28
+    },
+    {
+      "pr_a": 65305,
+      "pr_b": 62941,
+      "overlapping_files": [
+        "vllm/v1/attention/backends/mla/sparse_swa.py"
+      ],
+      "collision_score": 0.088,
+      "risk_level": "MEDIUM",
+      "shared_churn": 33
+    },
+    {
+      "pr_a": 61952,
+      "pr_b": 63676,
+      "overlapping_files": [
+        "vllm/v1/attention/backends/utils.py"
+      ],
+      "collision_score": 0.068,
+      "risk_level": "MEDIUM",
+      "shared_churn": 27
+    },
+    {
+      "pr_a": 65398,
+      "pr_b": 62093,
+      "overlapping_files": [
+        "vllm/platforms/rocm.py"
+      ],
+      "collision_score": 0.057,
+      "risk_level": "LOW",
+      "shared_churn": 14
+    },
+    {
+      "pr_a": 65398,
+      "pr_b": 65143,
+      "overlapping_files": [
+        "vllm/model_executor/layers/quantization/base_config.py"
+      ],
+      "collision_score": 0.045,
+      "risk_level": "LOW",
+      "shared_churn": 10
+    },
+    {
+      "pr_a": 65305,
+      "pr_b": 64560,
+      "overlapping_files": [
+        "vllm/v1/attention/backend.py"
+      ],
+      "collision_score": 0.043,
+      "risk_level": "LOW",
+      "shared_churn": 10
+    },
+    {
+      "pr_a": 59418,
+      "pr_b": 64765,
+      "overlapping_files": [
+        ".buildkite/test_areas/kernels.yaml"
+      ],
+      "collision_score": 0.043,
+      "risk_level": "LOW",
+      "shared_churn": 3
+    }
+  ],
+  "chains": [
+    [
+      56606,
+      65398
+    ],
+    [
+      62750,
+      65398
+    ],
+    [
+      61779,
+      61952
+    ],
+    [
+      52838,
+      62933
+    ],
+    [
+      63675,
+      63676
+    ]
+  ]
+}

@@ -1,0 +1,1378 @@
+{
+  "summary": {
+    "repo": "sgl-project/sglang",
+    "total_open_prs_analyzed": 30,
+    "status_breakdown": {
+      "WAITING_REVIEW": 1,
+      "CI_FAILURE": 20,
+      "DRAFT": 6,
+      "BLOCKED_BY_DEP": 2,
+      "CONFLICTING": 1
+    },
+    "foundational_unblockers": [
+      48065,
+      39834
+    ],
+    "dependency_stacks_count": 2,
+    "critical_file_collisions": 6,
+    "top_hotspot_files": [
+      {
+        "path": "python/sglang/srt/layers/quantization/fp8.py",
+        "pr_count": 4,
+        "churn": 123
+      },
+      {
+        "path": "python/sglang/srt/environ.py",
+        "pr_count": 4,
+        "churn": 12
+      },
+      {
+        "path": "python/sglang/srt/layers/quantization/fp8_utils.py",
+        "pr_count": 3,
+        "churn": 287
+      },
+      {
+        "path": "python/sglang/srt/models/deepseek_v4.py",
+        "pr_count": 3,
+        "churn": 38
+      },
+      {
+        "path": "docs/docs/references/environment_variables.mdx",
+        "pr_count": 3,
+        "churn": 20
+      }
+    ]
+  },
+  "prs": [
+    {
+      "number": 48166,
+      "title": "[Perf] [NVIDIA] moe: Add L4 Triton fused MoE configs for Qwen3-30B-A3B",
+      "url": "https://github.com/sgl-project/sglang/pull/48166",
+      "author": "shijie-lyu",
+      "status": "WAITING_REVIEW",
+      "reason": "Awaiting maintainer review",
+      "ci_status": "PENDING",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "MERGEABLE",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 2,
+      "collisions": []
+    },
+    {
+      "number": 47243,
+      "title": "[Fix] encoder: Prevent scheduler crash on Encoder failure",
+      "url": "https://github.com/sgl-project/sglang/pull/47243",
+      "author": "mmdbhs",
+      "status": "CI_FAILURE",
+      "reason": "CI checks are failing",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "MERGEABLE",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 1,
+      "collisions": []
+    },
+    {
+      "number": 47882,
+      "title": "[Feat] qwen4_exp: Support the MXFP8 PLE table of compressed-tensors checkpoints",
+      "url": "https://github.com/sgl-project/sglang/pull/47882",
+      "author": "Xia-Weiwen",
+      "status": "CI_FAILURE",
+      "reason": "CI checks are failing",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "MERGEABLE",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 2,
+      "collisions": []
+    },
+    {
+      "number": 48131,
+      "title": "[CI] [AMD] nightly-disagg: Name models by HF repo id and keep all cluster config in the workflow",
+      "url": "https://github.com/sgl-project/sglang/pull/48131",
+      "author": "bingxche",
+      "status": "CI_FAILURE",
+      "reason": "CI checks are failing",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "MERGEABLE",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 41,
+      "collisions": []
+    },
+    {
+      "number": 48165,
+      "title": "[Perf] Speed up Hopper group32 FP8 quantization with FP32 scales",
+      "url": "https://github.com/sgl-project/sglang/pull/48165",
+      "author": "Frank-whw",
+      "status": "DRAFT",
+      "reason": "Marked as draft / work in progress",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "MERGEABLE",
+      "is_draft": true,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 6,
+      "collisions": [
+        {
+          "colliding_pr": 45828,
+          "risk_level": "CRITICAL",
+          "collision_score": 0.384,
+          "overlapping_files": [
+            "python/sglang/kernels/ops/quantization/fp8_kernel.py"
+          ]
+        }
+      ]
+    },
+    {
+      "number": 48097,
+      "title": "[Feat] [AMD] moe: Run AITER MegaMoEGfx1250 with the mori dispatch (dsv4 gfx1250 di 8/N)",
+      "url": "https://github.com/sgl-project/sglang/pull/48097",
+      "author": "inkcherry",
+      "status": "CI_FAILURE",
+      "reason": "CI checks are failing",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "MERGEABLE",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 3,
+      "collisions": [
+        {
+          "colliding_pr": 45828,
+          "risk_level": "HIGH",
+          "collision_score": 0.189,
+          "overlapping_files": [
+            "python/sglang/srt/layers/quantization/fp8.py"
+          ]
+        },
+        {
+          "colliding_pr": 48064,
+          "risk_level": "MEDIUM",
+          "collision_score": 0.169,
+          "overlapping_files": [
+            "python/sglang/srt/layers/quantization/fp8.py"
+          ]
+        },
+        {
+          "colliding_pr": 48069,
+          "risk_level": "MEDIUM",
+          "collision_score": 0.126,
+          "overlapping_files": [
+            "python/sglang/srt/layers/quantization/fp8.py"
+          ]
+        }
+      ]
+    },
+    {
+      "number": 48162,
+      "title": "[Feat] [AMD] dsv4: FP4 indexer with natural layout and OPUS MQA logits (dsv4 gfx1250 di 9/N)",
+      "url": "https://github.com/sgl-project/sglang/pull/48162",
+      "author": "inkcherry",
+      "status": "CI_FAILURE",
+      "reason": "CI checks are failing",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "MERGEABLE",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 6,
+      "collisions": [
+        {
+          "colliding_pr": 48093,
+          "risk_level": "HIGH",
+          "collision_score": 0.336,
+          "overlapping_files": [
+            "python/sglang/srt/layers/attention/deepseek_v4_backend_hip_radix.py"
+          ]
+        },
+        {
+          "colliding_pr": 48098,
+          "risk_level": "MEDIUM",
+          "collision_score": 0.076,
+          "overlapping_files": [
+            "python/sglang/srt/arg_groups/serving_hook.py"
+          ]
+        }
+      ]
+    },
+    {
+      "number": 48095,
+      "title": "[Perf] [AMD] dspark: Speed up the DSPARK draft step (dsv4 gfx1250 di 7/N)",
+      "url": "https://github.com/sgl-project/sglang/pull/48095",
+      "author": "inkcherry",
+      "status": "CI_FAILURE",
+      "reason": "CI checks are failing",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "MERGEABLE",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 2,
+      "collisions": []
+    },
+    {
+      "number": 48094,
+      "title": "[Perf] [AMD] dsv4: Fuse the next RMSNorm into mhc_post_pre (dsv4 gfx1250 di 6/N)",
+      "url": "https://github.com/sgl-project/sglang/pull/48094",
+      "author": "inkcherry",
+      "status": "BLOCKED_BY_DEP",
+      "reason": "Blocked on open dependency: #48065",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "MERGEABLE",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [
+        48065
+      ],
+      "blocks": [],
+      "files_changed_count": 3,
+      "collisions": [
+        {
+          "colliding_pr": 48065,
+          "risk_level": "HIGH",
+          "collision_score": 0.44,
+          "overlapping_files": [
+            "python/sglang/srt/models/deepseek_v4_boundary.py",
+            "python/sglang/srt/models/deepseek_v4_platform_stage.py"
+          ]
+        }
+      ]
+    },
+    {
+      "number": 48093,
+      "title": "[Perf] [AMD] dsv4: Cut HIP prefill and verify host overhead (dsv4 gfx1250 di 5/N)",
+      "url": "https://github.com/sgl-project/sglang/pull/48093",
+      "author": "inkcherry",
+      "status": "CI_FAILURE",
+      "reason": "CI checks are failing",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "MERGEABLE",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 7,
+      "collisions": [
+        {
+          "colliding_pr": 48162,
+          "risk_level": "HIGH",
+          "collision_score": 0.336,
+          "overlapping_files": [
+            "python/sglang/srt/layers/attention/deepseek_v4_backend_hip_radix.py"
+          ]
+        },
+        {
+          "colliding_pr": 48064,
+          "risk_level": "MEDIUM",
+          "collision_score": 0.1,
+          "overlapping_files": [
+            "python/sglang/srt/models/deepseek_v4.py"
+          ]
+        },
+        {
+          "colliding_pr": 48069,
+          "risk_level": "MEDIUM",
+          "collision_score": 0.076,
+          "overlapping_files": [
+            "python/sglang/srt/models/deepseek_v4.py"
+          ]
+        }
+      ]
+    },
+    {
+      "number": 48160,
+      "title": "Update Case",
+      "url": "https://github.com/sgl-project/sglang/pull/48160",
+      "author": "YZY00Raiser",
+      "status": "CI_FAILURE",
+      "reason": "CI checks are failing",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "MERGEABLE",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 4,
+      "collisions": []
+    },
+    {
+      "number": 48069,
+      "title": "[Perf] [AMD] dsv4: Unified-KV attention kernels (dsv4 gfx1250 di 4/N)",
+      "url": "https://github.com/sgl-project/sglang/pull/48069",
+      "author": "inkcherry",
+      "status": "CI_FAILURE",
+      "reason": "CI checks are failing",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "MERGEABLE",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 17,
+      "collisions": [
+        {
+          "colliding_pr": 48064,
+          "risk_level": "CRITICAL",
+          "collision_score": 0.612,
+          "overlapping_files": [
+            "python/sglang/kernels/ops/attention/dsv4/unified_kv_kernels/paged_prefill.py",
+            "python/sglang/srt/arg_groups/model_hook.py",
+            "python/sglang/srt/layers/quantization/fp8.py",
+            "python/sglang/srt/layers/quantization/fp8_utils.py",
+            "python/sglang/srt/models/deepseek_common/amd/deepseek_v4_wo_a_fp8.py",
+            "python/sglang/srt/models/deepseek_v4.py"
+          ]
+        },
+        {
+          "colliding_pr": 45828,
+          "risk_level": "CRITICAL",
+          "collision_score": 0.427,
+          "overlapping_files": [
+            "python/sglang/srt/layers/quantization/fp8.py",
+            "python/sglang/srt/layers/quantization/fp8_utils.py"
+          ]
+        },
+        {
+          "colliding_pr": 48097,
+          "risk_level": "MEDIUM",
+          "collision_score": 0.126,
+          "overlapping_files": [
+            "python/sglang/srt/layers/quantization/fp8.py"
+          ]
+        },
+        {
+          "colliding_pr": 48093,
+          "risk_level": "MEDIUM",
+          "collision_score": 0.076,
+          "overlapping_files": [
+            "python/sglang/srt/models/deepseek_v4.py"
+          ]
+        },
+        {
+          "colliding_pr": 48126,
+          "risk_level": "LOW",
+          "collision_score": 0.034,
+          "overlapping_files": [
+            "python/sglang/srt/model_executor/pool_configurator.py"
+          ]
+        }
+      ]
+    },
+    {
+      "number": 47052,
+      "title": "[Perf] [AMD] qwen3: Fuse prefill QK-norm + RoPE on ROCm with the JIT qknorm_rope kernel",
+      "url": "https://github.com/sgl-project/sglang/pull/47052",
+      "author": "fengshaoyi-amd",
+      "status": "CI_FAILURE",
+      "reason": "CI checks are failing",
+      "ci_status": "FAILURE",
+      "review_decision": "APPROVED",
+      "mergeable": "MERGEABLE",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 6,
+      "collisions": [
+        {
+          "colliding_pr": 48126,
+          "risk_level": "MEDIUM",
+          "collision_score": 0.078,
+          "overlapping_files": [
+            "python/sglang/srt/models/qwen3.py"
+          ]
+        }
+      ]
+    },
+    {
+      "number": 48064,
+      "title": "[Perf] [AMD] dsv4: aiter sparse prefill, fp8 wo_a and mxfp8_128 GEMM (dsv4 gfx1250 di 1/N)",
+      "url": "https://github.com/sgl-project/sglang/pull/48064",
+      "author": "inkcherry",
+      "status": "CI_FAILURE",
+      "reason": "CI checks are failing",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "MERGEABLE",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 6,
+      "collisions": [
+        {
+          "colliding_pr": 48069,
+          "risk_level": "CRITICAL",
+          "collision_score": 0.612,
+          "overlapping_files": [
+            "python/sglang/kernels/ops/attention/dsv4/unified_kv_kernels/paged_prefill.py",
+            "python/sglang/srt/arg_groups/model_hook.py",
+            "python/sglang/srt/layers/quantization/fp8.py",
+            "python/sglang/srt/layers/quantization/fp8_utils.py",
+            "python/sglang/srt/models/deepseek_common/amd/deepseek_v4_wo_a_fp8.py",
+            "python/sglang/srt/models/deepseek_v4.py"
+          ]
+        },
+        {
+          "colliding_pr": 45828,
+          "risk_level": "CRITICAL",
+          "collision_score": 0.436,
+          "overlapping_files": [
+            "python/sglang/srt/layers/quantization/fp8.py",
+            "python/sglang/srt/layers/quantization/fp8_utils.py"
+          ]
+        },
+        {
+          "colliding_pr": 48097,
+          "risk_level": "MEDIUM",
+          "collision_score": 0.169,
+          "overlapping_files": [
+            "python/sglang/srt/layers/quantization/fp8.py"
+          ]
+        },
+        {
+          "colliding_pr": 48093,
+          "risk_level": "MEDIUM",
+          "collision_score": 0.1,
+          "overlapping_files": [
+            "python/sglang/srt/models/deepseek_v4.py"
+          ]
+        }
+      ]
+    },
+    {
+      "number": 48164,
+      "title": "[Fix] kimi-k3: Reuse the attention-residual bank across forward passes",
+      "url": "https://github.com/sgl-project/sglang/pull/48164",
+      "author": "amd-mvarjoka",
+      "status": "DRAFT",
+      "reason": "Marked as draft / work in progress",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "MERGEABLE",
+      "is_draft": true,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 4,
+      "collisions": []
+    },
+    {
+      "number": 48065,
+      "title": "[Fix] [AMD] dsv4: Fix the mHC weight orientation across layer boundaries (dsv4 gfx1250 di 2/N)",
+      "url": "https://github.com/sgl-project/sglang/pull/48065",
+      "author": "inkcherry",
+      "status": "CI_FAILURE",
+      "reason": "CI checks are failing",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "MERGEABLE",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [
+        48094
+      ],
+      "files_changed_count": 2,
+      "collisions": [
+        {
+          "colliding_pr": 48094,
+          "risk_level": "HIGH",
+          "collision_score": 0.44,
+          "overlapping_files": [
+            "python/sglang/srt/models/deepseek_v4_boundary.py",
+            "python/sglang/srt/models/deepseek_v4_platform_stage.py"
+          ]
+        }
+      ]
+    },
+    {
+      "number": 45137,
+      "title": "[Feat] [diffusion] [NPU] Add HiDream-O1-Image support (DEV, DEV-2604, and FULL TI2I)",
+      "url": "https://github.com/sgl-project/sglang/pull/45137",
+      "author": "e-martirosian",
+      "status": "DRAFT",
+      "reason": "Marked as draft / work in progress",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "CONFLICTING",
+      "is_draft": true,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 17,
+      "collisions": []
+    },
+    {
+      "number": 47893,
+      "title": "[Perf] [NVIDIA] glm5_next: Run the fused KDA decode kernel at 8 and 16 heads per rank",
+      "url": "https://github.com/sgl-project/sglang/pull/47893",
+      "author": "ischencheng",
+      "status": "CI_FAILURE",
+      "reason": "CI checks are failing",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "MERGEABLE",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 9,
+      "collisions": []
+    },
+    {
+      "number": 48163,
+      "title": "[Fix] hicache: Register the whole host-pool allocation with Mooncake",
+      "url": "https://github.com/sgl-project/sglang/pull/48163",
+      "author": "NUABO",
+      "status": "CI_FAILURE",
+      "reason": "CI checks are failing",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "MERGEABLE",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 4,
+      "collisions": []
+    },
+    {
+      "number": 47960,
+      "title": "[Perf] [NVIDIA] dsv4/topk_v2: Exactness modes (fast / exact / deterministic) and an exact cluster path",
+      "url": "https://github.com/sgl-project/sglang/pull/47960",
+      "author": "DarkSharpness",
+      "status": "CI_FAILURE",
+      "reason": "CI checks are failing",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "MERGEABLE",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 6,
+      "collisions": [
+        {
+          "colliding_pr": 48096,
+          "risk_level": "LOW",
+          "collision_score": 0.076,
+          "overlapping_files": [
+            "python/sglang/srt/environ.py"
+          ]
+        },
+        {
+          "colliding_pr": 48098,
+          "risk_level": "LOW",
+          "collision_score": 0.054,
+          "overlapping_files": [
+            "python/sglang/srt/environ.py"
+          ]
+        },
+        {
+          "colliding_pr": 45828,
+          "risk_level": "LOW",
+          "collision_score": 0.032,
+          "overlapping_files": [
+            "python/sglang/srt/environ.py"
+          ]
+        }
+      ]
+    },
+    {
+      "number": 48126,
+      "title": "[Feat] [NPU] attention: Support Modelslim GQA mxfp8 kvcache for 950 NPU",
+      "url": "https://github.com/sgl-project/sglang/pull/48126",
+      "author": "LinyuanLi0046",
+      "status": "CI_FAILURE",
+      "reason": "CI checks are failing",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "MERGEABLE",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 14,
+      "collisions": [
+        {
+          "colliding_pr": 47052,
+          "risk_level": "MEDIUM",
+          "collision_score": 0.078,
+          "overlapping_files": [
+            "python/sglang/srt/models/qwen3.py"
+          ]
+        },
+        {
+          "colliding_pr": 48069,
+          "risk_level": "LOW",
+          "collision_score": 0.034,
+          "overlapping_files": [
+            "python/sglang/srt/model_executor/pool_configurator.py"
+          ]
+        }
+      ]
+    },
+    {
+      "number": 48134,
+      "title": "[CI] [AMD] ci: Follow #47619 on AMD and fix two never-run registrations",
+      "url": "https://github.com/sgl-project/sglang/pull/48134",
+      "author": "bingxche",
+      "status": "DRAFT",
+      "reason": "Marked as draft / work in progress",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "MERGEABLE",
+      "is_draft": true,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 34,
+      "collisions": []
+    },
+    {
+      "number": 43713,
+      "title": "[Fix] multimodal: Keep Pillow's decompression-bomb guard in NanoNemotron processor",
+      "url": "https://github.com/sgl-project/sglang/pull/43713",
+      "author": "abhishekacharya200",
+      "status": "CONFLICTING",
+      "reason": "Merge conflict with base branch",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "CONFLICTING",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 2,
+      "collisions": []
+    },
+    {
+      "number": 48098,
+      "title": "[Feat] pd: Place prefill sessions by projected per-rank token load",
+      "url": "https://github.com/sgl-project/sglang/pull/48098",
+      "author": "INBreezefall",
+      "status": "DRAFT",
+      "reason": "Marked as draft / work in progress",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "MERGEABLE",
+      "is_draft": true,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 10,
+      "collisions": [
+        {
+          "colliding_pr": 42780,
+          "risk_level": "CRITICAL",
+          "collision_score": 0.455,
+          "overlapping_files": [
+            "python/sglang/srt/arg_groups/fields/parallel.py",
+            "python/sglang/srt/managers/data_parallel_controller.py",
+            "test/registered/unit/managers/test_data_parallel_controller.py"
+          ]
+        },
+        {
+          "colliding_pr": 48096,
+          "risk_level": "HIGH",
+          "collision_score": 0.122,
+          "overlapping_files": [
+            "docs/docs/references/environment_variables.mdx",
+            "python/sglang/srt/environ.py"
+          ]
+        },
+        {
+          "colliding_pr": 45828,
+          "risk_level": "HIGH",
+          "collision_score": 0.07,
+          "overlapping_files": [
+            "docs/docs/references/environment_variables.mdx",
+            "python/sglang/srt/environ.py"
+          ]
+        },
+        {
+          "colliding_pr": 48162,
+          "risk_level": "MEDIUM",
+          "collision_score": 0.076,
+          "overlapping_files": [
+            "python/sglang/srt/arg_groups/serving_hook.py"
+          ]
+        },
+        {
+          "colliding_pr": 47960,
+          "risk_level": "LOW",
+          "collision_score": 0.054,
+          "overlapping_files": [
+            "python/sglang/srt/environ.py"
+          ]
+        }
+      ]
+    },
+    {
+      "number": 48096,
+      "title": "[Perf] radix-cache: Preserve long device prefixes during partial eviction",
+      "url": "https://github.com/sgl-project/sglang/pull/48096",
+      "author": "INBreezefall",
+      "status": "DRAFT",
+      "reason": "Marked as draft / work in progress",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "MERGEABLE",
+      "is_draft": true,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 5,
+      "collisions": [
+        {
+          "colliding_pr": 48098,
+          "risk_level": "HIGH",
+          "collision_score": 0.122,
+          "overlapping_files": [
+            "docs/docs/references/environment_variables.mdx",
+            "python/sglang/srt/environ.py"
+          ]
+        },
+        {
+          "colliding_pr": 45828,
+          "risk_level": "HIGH",
+          "collision_score": 0.078,
+          "overlapping_files": [
+            "docs/docs/references/environment_variables.mdx",
+            "python/sglang/srt/environ.py"
+          ]
+        },
+        {
+          "colliding_pr": 47960,
+          "risk_level": "LOW",
+          "collision_score": 0.076,
+          "overlapping_files": [
+            "python/sglang/srt/environ.py"
+          ]
+        }
+      ]
+    },
+    {
+      "number": 42780,
+      "title": "[Feat] elastic-ep: Add fixed-slot recovery admission and warmup lifecycle",
+      "url": "https://github.com/sgl-project/sglang/pull/42780",
+      "author": "tryambak2019",
+      "status": "BLOCKED_BY_DEP",
+      "reason": "Blocked on open dependency: #39834",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "CONFLICTING",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [
+        39834
+      ],
+      "blocks": [],
+      "files_changed_count": 26,
+      "collisions": [
+        {
+          "colliding_pr": 48098,
+          "risk_level": "CRITICAL",
+          "collision_score": 0.455,
+          "overlapping_files": [
+            "python/sglang/srt/arg_groups/fields/parallel.py",
+            "python/sglang/srt/managers/data_parallel_controller.py",
+            "test/registered/unit/managers/test_data_parallel_controller.py"
+          ]
+        },
+        {
+          "colliding_pr": 44047,
+          "risk_level": "CRITICAL",
+          "collision_score": 0.429,
+          "overlapping_files": [
+            "python/sglang/srt/managers/io_struct.py",
+            "python/sglang/srt/managers/tokenizer_manager.py"
+          ]
+        }
+      ]
+    },
+    {
+      "number": 43714,
+      "title": "[Fix] gemma4: Apply Gemma4 attention overrides to text-only checkpoints",
+      "url": "https://github.com/sgl-project/sglang/pull/43714",
+      "author": "abhishekacharya200",
+      "status": "CI_FAILURE",
+      "reason": "CI checks are failing",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "MERGEABLE",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 2,
+      "collisions": []
+    },
+    {
+      "number": 45828,
+      "title": "[Perf] fp8: Hopper small-M GEMV, fused KDA output quant, CUDA grouped top-k, partial-block tails",
+      "url": "https://github.com/sgl-project/sglang/pull/45828",
+      "author": "JustinTong0323",
+      "status": "CI_FAILURE",
+      "reason": "CI checks are failing",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "MERGEABLE",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 29,
+      "collisions": [
+        {
+          "colliding_pr": 48064,
+          "risk_level": "CRITICAL",
+          "collision_score": 0.436,
+          "overlapping_files": [
+            "python/sglang/srt/layers/quantization/fp8.py",
+            "python/sglang/srt/layers/quantization/fp8_utils.py"
+          ]
+        },
+        {
+          "colliding_pr": 48069,
+          "risk_level": "CRITICAL",
+          "collision_score": 0.427,
+          "overlapping_files": [
+            "python/sglang/srt/layers/quantization/fp8.py",
+            "python/sglang/srt/layers/quantization/fp8_utils.py"
+          ]
+        },
+        {
+          "colliding_pr": 48165,
+          "risk_level": "CRITICAL",
+          "collision_score": 0.384,
+          "overlapping_files": [
+            "python/sglang/kernels/ops/quantization/fp8_kernel.py"
+          ]
+        },
+        {
+          "colliding_pr": 48097,
+          "risk_level": "HIGH",
+          "collision_score": 0.189,
+          "overlapping_files": [
+            "python/sglang/srt/layers/quantization/fp8.py"
+          ]
+        },
+        {
+          "colliding_pr": 48096,
+          "risk_level": "HIGH",
+          "collision_score": 0.078,
+          "overlapping_files": [
+            "docs/docs/references/environment_variables.mdx",
+            "python/sglang/srt/environ.py"
+          ]
+        }
+      ]
+    },
+    {
+      "number": 35792,
+      "title": "[Fix] compressed-tensors: Honor .linear-wrapped ignore entries on fused shards",
+      "url": "https://github.com/sgl-project/sglang/pull/35792",
+      "author": "Smallfu666",
+      "status": "CI_FAILURE",
+      "reason": "CI checks are failing",
+      "ci_status": "FAILURE",
+      "review_decision": "APPROVED",
+      "mergeable": "MERGEABLE",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 2,
+      "collisions": []
+    },
+    {
+      "number": 44047,
+      "title": "[Fix] openai: Validate sampling bounds and preserve chat output limits",
+      "url": "https://github.com/sgl-project/sglang/pull/44047",
+      "author": "TheDuyIT",
+      "status": "CI_FAILURE",
+      "reason": "CI checks are failing",
+      "ci_status": "FAILURE",
+      "review_decision": "REVIEW_REQUIRED",
+      "mergeable": "MERGEABLE",
+      "is_draft": false,
+      "staleness_days": 0.0,
+      "blocked_by": [],
+      "blocks": [],
+      "files_changed_count": 17,
+      "collisions": [
+        {
+          "colliding_pr": 42780,
+          "risk_level": "CRITICAL",
+          "collision_score": 0.429,
+          "overlapping_files": [
+            "python/sglang/srt/managers/io_struct.py",
+            "python/sglang/srt/managers/tokenizer_manager.py"
+          ]
+        }
+      ]
+    }
+  ],
+  "hotspots": [
+    {
+      "path": "python/sglang/srt/layers/quantization/fp8.py",
+      "open_pr_count": 4,
+      "pr_numbers": [
+        45828,
+        48064,
+        48069,
+        48097
+      ],
+      "total_churn": 123
+    },
+    {
+      "path": "python/sglang/srt/environ.py",
+      "open_pr_count": 4,
+      "pr_numbers": [
+        45828,
+        47960,
+        48096,
+        48098
+      ],
+      "total_churn": 12
+    },
+    {
+      "path": "python/sglang/srt/layers/quantization/fp8_utils.py",
+      "open_pr_count": 3,
+      "pr_numbers": [
+        45828,
+        48064,
+        48069
+      ],
+      "total_churn": 287
+    },
+    {
+      "path": "python/sglang/srt/models/deepseek_v4.py",
+      "open_pr_count": 3,
+      "pr_numbers": [
+        48064,
+        48069,
+        48093
+      ],
+      "total_churn": 38
+    },
+    {
+      "path": "docs/docs/references/environment_variables.mdx",
+      "open_pr_count": 3,
+      "pr_numbers": [
+        45828,
+        48096,
+        48098
+      ],
+      "total_churn": 20
+    },
+    {
+      "path": "python/sglang/srt/managers/tokenizer_manager.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        42780,
+        44047
+      ],
+      "total_churn": 920
+    },
+    {
+      "path": "python/sglang/kernels/ops/quantization/fp8_kernel.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        45828,
+        48165
+      ],
+      "total_churn": 183
+    },
+    {
+      "path": "python/sglang/srt/layers/attention/deepseek_v4_backend_hip_radix.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        48093,
+        48162
+      ],
+      "total_churn": 143
+    },
+    {
+      "path": "test/registered/unit/managers/test_data_parallel_controller.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        42780,
+        48098
+      ],
+      "total_churn": 141
+    },
+    {
+      "path": "python/sglang/srt/managers/io_struct.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        42780,
+        44047
+      ],
+      "total_churn": 93
+    },
+    {
+      "path": "python/sglang/srt/managers/data_parallel_controller.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        42780,
+        48098
+      ],
+      "total_churn": 92
+    },
+    {
+      "path": "python/sglang/srt/models/deepseek_common/amd/deepseek_v4_wo_a_fp8.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        48064,
+        48069
+      ],
+      "total_churn": 68
+    },
+    {
+      "path": "python/sglang/srt/arg_groups/fields/parallel.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        42780,
+        48098
+      ],
+      "total_churn": 45
+    },
+    {
+      "path": "python/sglang/kernels/ops/attention/dsv4/unified_kv_kernels/paged_prefill.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        48064,
+        48069
+      ],
+      "total_churn": 31
+    },
+    {
+      "path": "python/sglang/srt/models/qwen3.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        47052,
+        48126
+      ],
+      "total_churn": 23
+    },
+    {
+      "path": "python/sglang/srt/arg_groups/serving_hook.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        48098,
+        48162
+      ],
+      "total_churn": 18
+    },
+    {
+      "path": "python/sglang/srt/models/deepseek_v4_boundary.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        48065,
+        48094
+      ],
+      "total_churn": 10
+    },
+    {
+      "path": "python/sglang/srt/models/deepseek_v4_platform_stage.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        48065,
+        48094
+      ],
+      "total_churn": 10
+    },
+    {
+      "path": "python/sglang/srt/model_executor/pool_configurator.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        48069,
+        48126
+      ],
+      "total_churn": 7
+    },
+    {
+      "path": "python/sglang/srt/arg_groups/model_hook.py",
+      "open_pr_count": 2,
+      "pr_numbers": [
+        48064,
+        48069
+      ],
+      "total_churn": 4
+    }
+  ],
+  "collisions": [
+    {
+      "pr_a": 48069,
+      "pr_b": 48064,
+      "overlapping_files": [
+        "python/sglang/kernels/ops/attention/dsv4/unified_kv_kernels/paged_prefill.py",
+        "python/sglang/srt/arg_groups/model_hook.py",
+        "python/sglang/srt/layers/quantization/fp8.py",
+        "python/sglang/srt/layers/quantization/fp8_utils.py",
+        "python/sglang/srt/models/deepseek_common/amd/deepseek_v4_wo_a_fp8.py",
+        "python/sglang/srt/models/deepseek_v4.py"
+      ],
+      "collision_score": 0.612,
+      "risk_level": "CRITICAL",
+      "shared_churn": 303
+    },
+    {
+      "pr_a": 48098,
+      "pr_b": 42780,
+      "overlapping_files": [
+        "python/sglang/srt/arg_groups/fields/parallel.py",
+        "python/sglang/srt/managers/data_parallel_controller.py",
+        "test/registered/unit/managers/test_data_parallel_controller.py"
+      ],
+      "collision_score": 0.455,
+      "risk_level": "CRITICAL",
+      "shared_churn": 278
+    },
+    {
+      "pr_a": 48064,
+      "pr_b": 45828,
+      "overlapping_files": [
+        "python/sglang/srt/layers/quantization/fp8.py",
+        "python/sglang/srt/layers/quantization/fp8_utils.py"
+      ],
+      "collision_score": 0.436,
+      "risk_level": "CRITICAL",
+      "shared_churn": 295
+    },
+    {
+      "pr_a": 42780,
+      "pr_b": 44047,
+      "overlapping_files": [
+        "python/sglang/srt/managers/io_struct.py",
+        "python/sglang/srt/managers/tokenizer_manager.py"
+      ],
+      "collision_score": 0.429,
+      "risk_level": "CRITICAL",
+      "shared_churn": 1013
+    },
+    {
+      "pr_a": 48069,
+      "pr_b": 45828,
+      "overlapping_files": [
+        "python/sglang/srt/layers/quantization/fp8.py",
+        "python/sglang/srt/layers/quantization/fp8_utils.py"
+      ],
+      "collision_score": 0.427,
+      "risk_level": "CRITICAL",
+      "shared_churn": 295
+    },
+    {
+      "pr_a": 48165,
+      "pr_b": 45828,
+      "overlapping_files": [
+        "python/sglang/kernels/ops/quantization/fp8_kernel.py"
+      ],
+      "collision_score": 0.384,
+      "risk_level": "CRITICAL",
+      "shared_churn": 183
+    },
+    {
+      "pr_a": 48094,
+      "pr_b": 48065,
+      "overlapping_files": [
+        "python/sglang/srt/models/deepseek_v4_boundary.py",
+        "python/sglang/srt/models/deepseek_v4_platform_stage.py"
+      ],
+      "collision_score": 0.44,
+      "risk_level": "HIGH",
+      "shared_churn": 20
+    },
+    {
+      "pr_a": 48162,
+      "pr_b": 48093,
+      "overlapping_files": [
+        "python/sglang/srt/layers/attention/deepseek_v4_backend_hip_radix.py"
+      ],
+      "collision_score": 0.336,
+      "risk_level": "HIGH",
+      "shared_churn": 143
+    },
+    {
+      "pr_a": 48097,
+      "pr_b": 45828,
+      "overlapping_files": [
+        "python/sglang/srt/layers/quantization/fp8.py"
+      ],
+      "collision_score": 0.189,
+      "risk_level": "HIGH",
+      "shared_churn": 85
+    },
+    {
+      "pr_a": 48098,
+      "pr_b": 48096,
+      "overlapping_files": [
+        "docs/docs/references/environment_variables.mdx",
+        "python/sglang/srt/environ.py"
+      ],
+      "collision_score": 0.122,
+      "risk_level": "HIGH",
+      "shared_churn": 15
+    },
+    {
+      "pr_a": 48096,
+      "pr_b": 45828,
+      "overlapping_files": [
+        "docs/docs/references/environment_variables.mdx",
+        "python/sglang/srt/environ.py"
+      ],
+      "collision_score": 0.078,
+      "risk_level": "HIGH",
+      "shared_churn": 20
+    },
+    {
+      "pr_a": 48098,
+      "pr_b": 45828,
+      "overlapping_files": [
+        "docs/docs/references/environment_variables.mdx",
+        "python/sglang/srt/environ.py"
+      ],
+      "collision_score": 0.07,
+      "risk_level": "HIGH",
+      "shared_churn": 19
+    },
+    {
+      "pr_a": 48097,
+      "pr_b": 48064,
+      "overlapping_files": [
+        "python/sglang/srt/layers/quantization/fp8.py"
+      ],
+      "collision_score": 0.169,
+      "risk_level": "MEDIUM",
+      "shared_churn": 47
+    },
+    {
+      "pr_a": 48097,
+      "pr_b": 48069,
+      "overlapping_files": [
+        "python/sglang/srt/layers/quantization/fp8.py"
+      ],
+      "collision_score": 0.126,
+      "risk_level": "MEDIUM",
+      "shared_churn": 47
+    },
+    {
+      "pr_a": 48093,
+      "pr_b": 48064,
+      "overlapping_files": [
+        "python/sglang/srt/models/deepseek_v4.py"
+      ],
+      "collision_score": 0.1,
+      "risk_level": "MEDIUM",
+      "shared_churn": 25
+    },
+    {
+      "pr_a": 47052,
+      "pr_b": 48126,
+      "overlapping_files": [
+        "python/sglang/srt/models/qwen3.py"
+      ],
+      "collision_score": 0.078,
+      "risk_level": "MEDIUM",
+      "shared_churn": 23
+    },
+    {
+      "pr_a": 48162,
+      "pr_b": 48098,
+      "overlapping_files": [
+        "python/sglang/srt/arg_groups/serving_hook.py"
+      ],
+      "collision_score": 0.076,
+      "risk_level": "MEDIUM",
+      "shared_churn": 18
+    },
+    {
+      "pr_a": 48093,
+      "pr_b": 48069,
+      "overlapping_files": [
+        "python/sglang/srt/models/deepseek_v4.py"
+      ],
+      "collision_score": 0.076,
+      "risk_level": "MEDIUM",
+      "shared_churn": 25
+    },
+    {
+      "pr_a": 47960,
+      "pr_b": 48096,
+      "overlapping_files": [
+        "python/sglang/srt/environ.py"
+      ],
+      "collision_score": 0.076,
+      "risk_level": "LOW",
+      "shared_churn": 8
+    },
+    {
+      "pr_a": 47960,
+      "pr_b": 48098,
+      "overlapping_files": [
+        "python/sglang/srt/environ.py"
+      ],
+      "collision_score": 0.054,
+      "risk_level": "LOW",
+      "shared_churn": 7
+    },
+    {
+      "pr_a": 48069,
+      "pr_b": 48126,
+      "overlapping_files": [
+        "python/sglang/srt/model_executor/pool_configurator.py"
+      ],
+      "collision_score": 0.034,
+      "risk_level": "LOW",
+      "shared_churn": 7
+    },
+    {
+      "pr_a": 47960,
+      "pr_b": 45828,
+      "overlapping_files": [
+        "python/sglang/srt/environ.py"
+      ],
+      "collision_score": 0.032,
+      "risk_level": "LOW",
+      "shared_churn": 7
+    }
+  ],
+  "chains": [
+    [
+      48065,
+      48094
+    ],
+    [
+      39834,
+      42780
+    ]
+  ]
+}

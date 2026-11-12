@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+.venv/
+venv/
+
+# macOS / editor
+.DS_Store
+.claude/
+
+# Live PR caches (fetched from GitHub; large, regenerate with `sync`)
+data/*_prs.json
+pr_radar_export.json
+pr_radar_data.json
