@@ -11,12 +11,16 @@ class DependencyParser:
     dependency relationships between PRs.
     """
 
-    # Primary dependency patterns with capturing groups
+    # Primary dependency patterns with capturing groups.
+    # Require either `#123` or explicit `PR #123` / `PR 123` so plain counts
+    # ("requires 2 GPUs", "parent 512 MiB", "parent 670aa7ec") are ignored.
+    _REF_LIST = r"((?:pr\s+#?|#)[0-9]+\b(?:\s*(?:,|and|&|/)\s*(?:pr\s+#?|#)[0-9]+\b)*)"
+
     PATTERNS = [
-        # Stacked on #123, #456, and #789
+        # Stacked on #123, #456, and #789 (skip compound words like foundation-model-stack)
         (
             re.compile(
-                r"(?i)\b(?:stacked\s+(?:on|upon)|stack\s*:?)\s*([#0-9\s,and&]+)",
+                rf"(?i)(?<![-\w])(?:stacked\s+(?:on|upon)|stack\s*:)\s*{_REF_LIST}",
                 re.MULTILINE,
             ),
             DependencyKind.STACKED_ON,
@@ -25,7 +29,7 @@ class DependencyParser:
         # Depends on #123, Depends on PR #123
         (
             re.compile(
-                r"(?i)\b(?:depends\s+(?:on|upon)|dependent\s+on)\s*(?:pr\s*)?([#0-9\s,and&]+)",
+                rf"(?i)\b(?:depends\s+(?:on|upon)|dependent\s+on)\s*{_REF_LIST}",
                 re.MULTILINE,
             ),
             DependencyKind.DEPENDS_ON,
@@ -34,7 +38,7 @@ class DependencyParser:
         # Blocked by #123, Blocked on #123
         (
             re.compile(
-                r"(?i)\b(?:blocked\s+(?:by|on))\s*(?:pr\s*)?([#0-9\s,and&]+)",
+                rf"(?i)\b(?:blocked\s+(?:by|on))\s*{_REF_LIST}",
                 re.MULTILINE,
             ),
             DependencyKind.BLOCKED_BY,
@@ -43,7 +47,7 @@ class DependencyParser:
         # Requires #123
         (
             re.compile(
-                r"(?i)\b(?:requires|prerequisite\s*:?)\s*(?:pr\s*)?([#0-9\s,and&]+)",
+                rf"(?i)\b(?:requires|prerequisite\s*:?)\s*{_REF_LIST}",
                 re.MULTILINE,
             ),
             DependencyKind.REQUIRES,
@@ -52,7 +56,7 @@ class DependencyParser:
         # Based on #123
         (
             re.compile(
-                r"(?i)\b(?:based\s+on|parent\s+pr\s*:?|parent\s*:?)\s*(?:pr\s*)?([#0-9\s,and&]+)",
+                rf"(?i)\b(?:based\s+on|parent\s+pr\s*:?|parent\s*:)\s*{_REF_LIST}",
                 re.MULTILINE,
             ),
             DependencyKind.STACKED_ON,
@@ -61,7 +65,7 @@ class DependencyParser:
         # Follow-up to #123
         (
             re.compile(
-                r"(?i)\b(?:follow[-\s]?up\s+(?:to|of))\s*(?:pr\s*)?([#0-9\s,and&]+)",
+                rf"(?i)\b(?:follow[-\s]?up\s+(?:to|of))\s*{_REF_LIST}",
                 re.MULTILINE,
             ),
             DependencyKind.RELATED,
@@ -69,11 +73,15 @@ class DependencyParser:
         ),
     ]
 
-    URL_PATTERN = re.compile(
-        r"https?://github\.com/(?:[\w\-\.]+)/(?:[\w\-\.]+)/pull/([0-9]+)"
+    NEGATION_PREFIX = re.compile(
+        r"(?i)\b(?:not|no\s+longer|doesn't|does\s+not|without|never)\s+$"
     )
 
-    NUMBER_EXTRACTOR = re.compile(r"#?([0-9]+)")
+    URL_PATTERN = re.compile(
+        r"https?://github\.com/([\w\-\.]+)/([\w\-\.]+)/pull/([0-9]+)"
+    )
+
+    NUMBER_EXTRACTOR = re.compile(r"(?:(?<![\w./-])#|(?i:\bpr\s+))([0-9]+)\b")
 
     @classmethod
     def parse_pr(
@@ -107,11 +115,14 @@ class DependencyParser:
         lines = body_text.splitlines()
 
         # 2. Heuristic text search line by line
+        repo_lower = pr.repo.lower() if pr.repo else ""
         for line in lines:
             # Check dependency keywords
             for pattern, kind, conf in cls.PATTERNS:
                 matches = pattern.finditer(line)
                 for m in matches:
+                    if cls.NEGATION_PREFIX.search(line[: m.start()]):
+                        continue
                     raw_numbers = m.group(1)
                     nums = cls.NUMBER_EXTRACTOR.findall(raw_numbers)
                     for n_str in nums:
@@ -139,7 +150,9 @@ class DependencyParser:
             # Check full GitHub PR URLs in lines containing dependency-like phrases
             if any(k in line.lower() for k in ["depend", "block", "stack", "require", "after", "parent"]):
                 url_matches = cls.URL_PATTERN.findall(line)
-                for n_str in url_matches:
+                for owner, repo_name, n_str in url_matches:
+                    if repo_lower and f"{owner}/{repo_name}".lower() != repo_lower:
+                        continue
                     try:
                         n = int(n_str)
                     except ValueError:

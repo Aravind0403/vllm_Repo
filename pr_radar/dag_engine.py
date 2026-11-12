@@ -118,6 +118,12 @@ class DAGEngine:
                             # Reverse path so it reads: [Base, ..., Tip]
                             chains.append(list(reversed(path)))
 
+            # Surface cycles (e.g. A <-> B) that have no tips/bases so they aren't hidden
+            if not bases or not tips:
+                for cyc in nx.simple_cycles(sg):
+                    if cyc:
+                        chains.append(sorted(cyc))
+
         # Deduplicate and sort by length
         unique_chains: List[List[int]] = []
         for chain in chains:

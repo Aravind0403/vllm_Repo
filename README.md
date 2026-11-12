@@ -56,7 +56,7 @@ If a refresh fails the cached data is served and the failure is reported in `syn
 ## Quickstart
 
 ```bash
-pip install -e .            # or: pip install pydantic networkx requests rich fastapi uvicorn
+pip install -e ".[dev]"     # or: pip install pydantic networkx requests rich fastapi uvicorn
 
 # First sync (needs a token: GITHUB_TOKEN, GH_TOKEN, or `gh auth login`)
 python3 -m pr_radar.cli sync --repo vllm-project/vllm --limit 0     # 0 = every open PR

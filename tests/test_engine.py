@@ -112,3 +112,29 @@ def test_status_tracker_diagnosis():
     assert analyses[4].triage_status == TriageStatus.BLOCKED_BY_CI
     assert analyses[5].triage_status == TriageStatus.STALE
 
+
+def test_dependency_parser_ignores_bare_numbers_negations_and_cross_repo_urls():
+    pr = create_sample_pr(
+        number=500,
+        repo="vllm-project/vllm",
+        body=(
+            "E2E requires 2 GPUs and requires 16-byte-aligned buffers.\n"
+            "Omni parent 670aa7ec, parent 512 MiB, foundation-model-stack #81.\n"
+            "No longer blocked by #99.\n"
+            "Requires https://github.com/ROCm/aiter/pull/6850 and https://github.com/someone/vllm/pull/1.\n"
+            "Depends on #41 and PR 43.\n"
+            "Blocked by https://github.com/vllm-project/vllm/pull/42.\n"
+        ),
+    )
+    rels = DependencyParser.parse_pr(pr)
+    assert [r.target_pr for r in rels] == [41, 43, 42]
+
+
+def test_dag_engine_surfaces_cycles():
+    pr1 = create_sample_pr(1, body="Blocked by #2")
+    pr2 = create_sample_pr(2, body="Blocked by #1")
+    rels = DependencyParser.parse_pr(pr1) + DependencyParser.parse_pr(pr2)
+    dag = DAGEngine([pr1, pr2], rels)
+    assert dag.get_cycles()
+    assert dag.get_dependency_chains() == [[1, 2]]
+

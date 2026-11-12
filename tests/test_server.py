@@ -103,3 +103,53 @@ def test_serve_frontend_index():
     response = client.get("/")
     assert response.status_code == 200
     assert "PR Radar" in response.text
+    assert "repoSelect" in response.text
+
+
+def test_dag_subsystem_filter_filters_chains_and_includes_cycles():
+    all_dag = client.get("/api/v1/dag?scope=stacks").json()
+    rocm_dag = client.get("/api/v1/dag?scope=stacks&subsystem=ROCm").json()
+    assert "cycles" in all_dag
+    assert len(rocm_dag["chains"]) < len(all_dag["chains"])
+
+
+def test_invalid_subsystem_regex_returns_400():
+    assert client.get("/api/v1/triage?subsystem=[").status_code == 400
+    assert client.get("/api/v1/dag?subsystem=[").status_code == 400
+
+
+@pytest.mark.parametrize("path", ["/", "/overview", "/dag", "/collisions", "/triage", "/reviewers", "/simulator"])
+def test_all_spa_page_routes_serve_html(path):
+    response = client.get(path)
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    assert "PAGE_ROUTES" in response.text
+
+
+def test_hotspots_include_recent_pr_numbers_and_filter_collisions():
+    hotspots = client.get("/api/v1/hotspots").json()
+    assert hotspots
+    top = hotspots[0]
+    assert "recent_pr_numbers" in top
+    assert len(top["recent_pr_numbers"]) == len(top["pr_numbers"])
+
+    filtered = client.get("/api/v1/collisions", params={"file": top["path"], "limit": 20}).json()
+    assert filtered
+    assert all(top["path"] in c["overlapping_files"] for c in filtered)
+
+    live_only = client.get("/api/v1/collisions", params={"file": top["path"], "live_only": "true", "limit": 20}).json()
+    assert all(c["is_live_race"] for c in live_only)
+
+    sample = filtered[0]
+    searched = client.get("/api/v1/collisions", params={"file": top["path"], "search": str(sample["pr_a"])}).json()
+    assert any(c["pr_a"] == sample["pr_a"] or c["pr_b"] == sample["pr_a"] for c in searched)
+
+
+def test_reviewers_search_filters_by_handle():
+    rows = client.get("/api/v1/reviewers", params={"limit": 10}).json()
+    assert isinstance(rows, list)
+    if rows:
+        handle = rows[0]["reviewer"]
+        matched = client.get("/api/v1/reviewers", params={"search": handle[:4]}).json()
+        assert any(r["reviewer"] == handle for r in matched)
+        assert all(handle[:4].lower() in r["reviewer"].lower() for r in matched)

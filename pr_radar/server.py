@@ -94,7 +94,12 @@ def is_refreshing(slug: str) -> bool:
 
 
 def _regex(subsystem: Optional[str]) -> Optional[re.Pattern]:
-    return re.compile(subsystem, re.IGNORECASE) if subsystem and subsystem != "ALL" else None
+    if not subsystem or subsystem == "ALL":
+        return None
+    try:
+        return re.compile(subsystem, re.IGNORECASE)
+    except re.error as e:
+        raise HTTPException(status_code=400, detail=f"Invalid subsystem regex: {e}")
 
 
 # -------------------------------------------------------------
@@ -162,28 +167,11 @@ def get_subsystems(repo: Optional[str] = Query(None)) -> List[Dict[str, Any]]:
     return results
 
 
-@app.get("/api/v1/dag")
-def get_dag(
-    subsystem: Optional[str] = Query(None, description="Regex filter for subsystem"),
-    scope: str = Query("stacks", description="'stacks' (only chained PRs) or 'all'"),
-    repo: Optional[str] = Query(None),
-) -> Dict[str, Any]:
-    eng = get_engine(repo)
-    chains = eng.dag.get_dependency_chains() if eng.dag else []
-
-    chained_pr_nums = {num for chain in chains for num in chain}
-    subsystem_regex = _regex(subsystem)
-
-    nodes = []
-    included_ids = set()
-
-    for pr in eng.prs:
-        if scope == "stacks" and pr.number not in chained_pr_nums:
-            continue
-        if subsystem_regex and not subsystem_regex.search(pr.title):
-            continue
-        analysis = eng.analyses.get(pr.number)
-        nodes.append({
+def _serialize_dag_node(eng: PRRadarEngine, num: int, is_base: bool = False) -> Dict[str, Any]:
+    pr = eng.pr_map.get(num)
+    if pr is not None:
+        analysis = eng.analyses.get(num)
+        return {
             "id": pr.number,
             "title": pr.title,
             "author": pr.author,
@@ -199,48 +187,91 @@ def get_dag(
             "risk_score": analysis.risk.score if analysis and analysis.risk else 0,
             "blocked_by": analysis.blocked_by if analysis else [],
             "blocks": analysis.blocks if analysis else [],
-            "is_base": False,
+            "is_base": is_base,
             "is_external": False,
-        })
+        }
+    node_data = eng.dag.graph.nodes.get(num, {}) if eng.dag else {}
+    state = node_data.get("state", "UNKNOWN")
+    return {
+        "id": num,
+        "title": node_data.get("title", f"{'Upstream Base' if is_base else 'Stacked'} PR #{num}"),
+        "author": node_data.get("author") or "external",
+        "url": f"https://github.com/{eng.repo_slug}/pull/{num}",
+        "status": state if is_base else "BLOCKED_BY_DEP",
+        "reason": {
+            "MERGED": "Already merged: dependents can rebase onto main",
+            "CLOSED": "Closed without merging: dependents are orphaned",
+            "OPEN": "Open but outside the synced window",
+        }.get(state, "Not resolved (may be an issue number, not a PR)"),
+        "state": state,
+        "ci_status": "UNKNOWN",
+        "review_decision": "NONE",
+        "is_draft": node_data.get("is_draft", False) if is_base else False,
+        "staleness_days": 0.0,
+        "risk_level": "LOW",
+        "risk_score": 0,
+        "blocked_by": [],
+        "blocks": [],
+        "is_base": is_base,
+        "is_external": True,
+    }
+
+
+@app.get("/api/v1/dag")
+def get_dag(
+    subsystem: Optional[str] = Query(None, description="Regex filter for subsystem"),
+    scope: str = Query("stacks", description="'stacks' (only chained PRs) or 'all'"),
+    repo: Optional[str] = Query(None),
+) -> Dict[str, Any]:
+    eng = get_engine(repo)
+    chains = eng.dag.get_dependency_chains() if eng.dag else []
+    cycles = eng.dag.get_cycles() if eng.dag else []
+
+    chained_pr_nums = {num for chain in chains for num in chain}
+    subsystem_regex = _regex(subsystem)
+
+    nodes = []
+    included_ids = set()
+
+    for pr in eng.prs:
+        if scope == "stacks" and pr.number not in chained_pr_nums:
+            continue
+        if subsystem_regex and not subsystem_regex.search(pr.title):
+            continue
+        nodes.append(_serialize_dag_node(eng, pr.number))
         included_ids.add(pr.number)
 
+    matched_ids = set(included_ids)
+    filtered_chains = [
+        c for c in chains if not subsystem_regex or any(num in matched_ids for num in c)
+    ]
+    filtered_cycles = [
+        c for c in cycles if not subsystem_regex or any(num in matched_ids for num in c)
+    ]
+
     edges = []
-    for chain in chains:
+    seen_edges = set()
+    for chain in filtered_chains:
         for i in range(len(chain) - 1):
             base_num, waiting_num = chain[i], chain[i + 1]
-            if (base_num in included_ids or waiting_num in included_ids) or (scope == "stacks" and not subsystem_regex):
-                for num, is_base in ((base_num, True), (waiting_num, False)):
-                    if num in included_ids:
-                        continue
-                    node_data = eng.dag.graph.nodes.get(num, {}) if eng.dag else {}
-                    state = node_data.get("state", "UNKNOWN")
-                    nodes.append({
-                        "id": num,
-                        "title": node_data.get("title", f"{'Upstream Base' if is_base else 'Stacked'} PR #{num}"),
-                        "author": node_data.get("author") or "external",
-                        "url": f"https://github.com/{eng.repo_slug}/pull/{num}",
-                        "status": state if is_base else "BLOCKED_BY_DEP",
-                        "reason": {
-                            "MERGED": "Already merged: dependents can rebase onto main",
-                            "CLOSED": "Closed without merging: dependents are orphaned",
-                            "OPEN": "Open but outside the synced window",
-                        }.get(state, "Not resolved (may be an issue number, not a PR)"),
-                        "state": state,
-                        "ci_status": "UNKNOWN",
-                        "review_decision": "NONE",
-                        "is_draft": node_data.get("is_draft", False) if is_base else False,
-                        "staleness_days": 0.0,
-                        "risk_level": "LOW",
-                        "risk_score": 0,
-                        "blocked_by": [],
-                        "blocks": [],
-                        "is_base": is_base,
-                        "is_external": True,
-                    })
-                    included_ids.add(num)
+            for num, is_base in ((base_num, True), (waiting_num, False)):
+                if num in included_ids:
+                    continue
+                nodes.append(_serialize_dag_node(eng, num, is_base=is_base))
+                included_ids.add(num)
+            edge_key = (waiting_num, base_num)
+            if edge_key not in seen_edges:
+                seen_edges.add(edge_key)
                 edges.append({"from": waiting_num, "to": base_num, "kind": "stacked_on"})
 
-    return {"repo": eng.repo_slug, "scope": scope, "nodes": nodes, "edges": edges, "chains": chains}
+    return {
+        "repo": eng.repo_slug,
+        "scope": scope,
+        "nodes": nodes,
+        "edges": edges,
+        "chains": filtered_chains,
+        "cycles": filtered_cycles,
+    }
 
 
 @app.get("/api/v1/collisions")
@@ -248,11 +279,14 @@ def get_collisions(
     subsystem: Optional[str] = Query(None),
     min_risk: Optional[str] = Query(None, description="CRITICAL, HIGH, MEDIUM, LOW"),
     live_only: bool = Query(False, description="Only collisions where both PRs are active"),
+    file: Optional[str] = Query(None, description="Exact overlapping file path to filter by"),
+    search: Optional[str] = Query(None, description="Search PR #, title, author, or file"),
     limit: int = Query(200),
     repo: Optional[str] = Query(None),
 ) -> List[Dict[str, Any]]:
     eng = get_engine(repo)
     subsystem_regex = _regex(subsystem)
+    search_lower = search.lower() if search else None
     results = []
     ordered = sorted(eng.collisions, key=lambda c: (not c.is_live_race, c.risk_level != "CRITICAL", -c.collision_score))
     for c in ordered:
@@ -260,10 +294,19 @@ def get_collisions(
             continue
         if live_only and not c.is_live_race:
             continue
+        if file and file not in c.overlapping_files:
+            continue
         if subsystem_regex:
             if not (subsystem_regex.search(c.pr_a_title) or subsystem_regex.search(c.pr_b_title)
                     or any(subsystem_regex.search(f) for f in c.overlapping_files)):
                 continue
+        if search_lower and not (
+            search_lower in str(c.pr_a) or search_lower in str(c.pr_b)
+            or search_lower in c.pr_a_title.lower() or search_lower in c.pr_b_title.lower()
+            or search_lower in c.pr_a_author.lower() or search_lower in c.pr_b_author.lower()
+            or any(search_lower in f.lower() for f in c.overlapping_files)
+        ):
+            continue
         results.append(c.model_dump())
         if len(results) >= limit > 0:
             break
@@ -285,7 +328,12 @@ def get_hotspots(
             pr_match = any(subsystem_regex.search(eng.pr_map[n].title) for n in h.pr_numbers if n in eng.pr_map)
             if not path_match and not pr_match:
                 continue
-        results.append(h.model_dump())
+        row = h.model_dump()
+        row["recent_pr_numbers"] = sorted(
+            h.pr_numbers,
+            key=lambda n: eng.analyses[n].staleness_days if n in eng.analyses else 9999.0,
+        )
+        results.append(row)
         if len(results) >= limit:
             break
     return results
@@ -357,10 +405,18 @@ def get_risk(
 
 
 @app.get("/api/v1/reviewers")
-def get_reviewers(limit: int = 25, repo: Optional[str] = Query(None)) -> List[Dict[str, Any]]:
+def get_reviewers(
+    limit: int = 50,
+    search: Optional[str] = Query(None),
+    repo: Optional[str] = Query(None),
+) -> List[Dict[str, Any]]:
     """Per-reviewer workload: pending requests, reviews submitted, oldest pending wait."""
     eng = get_engine(repo)
-    return [rl.model_dump() for rl in eng.reviewer_load[:limit]]
+    rows = eng.reviewer_load
+    if search:
+        q = search.lower()
+        rows = [rl for rl in rows if q in rl.reviewer.lower()]
+    return [rl.model_dump() for rl in rows[:limit]]
 
 
 @app.get("/api/v1/prs/{pr_number}")
@@ -476,6 +532,12 @@ WEB_DIR = Path(__file__).resolve().parent / "web"
 
 
 @app.get("/", response_class=HTMLResponse)
+@app.get("/overview", response_class=HTMLResponse)
+@app.get("/dag", response_class=HTMLResponse)
+@app.get("/collisions", response_class=HTMLResponse)
+@app.get("/triage", response_class=HTMLResponse)
+@app.get("/reviewers", response_class=HTMLResponse)
+@app.get("/simulator", response_class=HTMLResponse)
 def serve_frontend():
     index_file = WEB_DIR / "index.html"
     if index_file.exists():

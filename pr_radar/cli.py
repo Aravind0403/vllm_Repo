@@ -178,6 +178,11 @@ def cmd_stacks(args):
         console.print(f"[yellow]No explicit PR dependency stacks discovered in the cached PRs for {repo}.[/yellow]")
         return
 
+    cycles = engine.dag.get_cycles() if engine.dag else []
+    if cycles:
+        cyc_str = ", ".join(" ↔ ".join(f"#{n}" for n in c) for c in cycles)
+        console.print(f"[bold red]⚠ Detected dependency cycles:[/bold red] {cyc_str}\n")
+
     console.print(f"\n[bold magenta]=== Discovered PR Stacks & Merge Trains ({len(chains)} chains) ===[/bold magenta]\n")
     for i, chain in enumerate(chains, 1):
         tree = Tree(f"[bold cyan]Stack #{i}[/bold cyan] ({len(chain)} PRs in sequence)")
@@ -362,13 +367,14 @@ def cmd_reviewers(args):
 def cmd_export(args):
     repo = args.repo
     out_file = args.out
-    engine = PRRadarEngine(repo_slug=repo).sync(use_cache=True)
+    engine = _load_engine(repo)
 
     export_data = {
         "summary": engine.get_summary_stats(),
         "prs": [engine.get_pr_dossier(pr.number) for pr in engine.prs],
         "hotspots": [h.model_dump() for h in engine.hotspots],
         "collisions": [c.model_dump() for c in engine.collisions],
+        "reviewer_load": [rl.model_dump() for rl in engine.reviewer_load],
         "chains": engine.dag.get_dependency_chains() if engine.dag else [],
     }
 
@@ -415,7 +421,7 @@ def cmd_dashboard(args):
             import re
             content = re.sub(
                 r"window\.__EMBEDDED_PR_RADAR_DATA__\s*=\s*.*?;",
-                f"window.__EMBEDDED_PR_RADAR_DATA__ = {json_str};",
+                lambda _: f"window.__EMBEDDED_PR_RADAR_DATA__ = {json_str};",
                 content,
                 flags=re.DOTALL,
             )
