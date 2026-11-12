@@ -9,26 +9,18 @@ jobs:
   sync-space:
     runs-on: ubuntu-latest
     steps:
-      - name: Skip if HF_TOKEN is not configured
-        if: ${{ secrets.HF_TOKEN == '' }}
-        run: echo "HF_TOKEN secret is not set; skipping Hugging Face Space sync."
-
       - uses: actions/checkout@v4
-        if: ${{ secrets.HF_TOKEN != '' }}
 
       - uses: actions/setup-python@v5
-        if: ${{ secrets.HF_TOKEN != '' }}
         with:
           python-version: "3.12"
 
       - name: Install dependencies
-        if: ${{ secrets.HF_TOKEN != '' }}
         run: |
           pip install -e .
           pip install -U huggingface_hub
 
       - name: Sync vLLM PRs and export static bundle
-        if: ${{ secrets.HF_TOKEN != '' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -36,7 +28,11 @@ jobs:
           python3 -m pr_radar.cli export-site --repo vllm-project/vllm --out dist_hf
 
       - name: Upload bundle to Hugging Face Static Space
-        if: ${{ secrets.HF_TOKEN != '' }}
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: python3 -c "from huggingface_hub import HfApi; HfApi().upload_folder(folder_path='dist_hf', repo_id='Aravind0495/vllm-pr-radar', repo_type='space', commit_message='Refresh vLLM PR Radar snapshot')"
+        run: |
+          if [ -z "${HF_TOKEN:-}" ]; then
+            echo "HF_TOKEN secret is not set; skipping Hugging Face upload."
+            exit 0
+          fi
+          python3 -c "from huggingface_hub import HfApi; HfApi().upload_folder(folder_path='dist_hf', repo_id='Aravind0495/vllm-pr-radar', repo_type='space', commit_message='Refresh vLLM PR Radar snapshot')"
