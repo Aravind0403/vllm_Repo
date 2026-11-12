@@ -470,7 +470,7 @@ def main():
     base_parser.add_argument(
         "--repo",
         default="vllm-project/vllm",
-        help="Target repository (e.g. vllm-project/vllm, sgl-project/sglang)",
+        help="Target repository (e.g. vllm-project/vllm)",
     )
 
     parser = argparse.ArgumentParser(description="PR Live Merges Radar & Dependency Engine", parents=[base_parser])

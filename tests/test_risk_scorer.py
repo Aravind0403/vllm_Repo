@@ -47,8 +47,8 @@ def test_churn_component_saturates():
 
 def test_generic_table_used_for_other_repos():
     assert path_table_for(VLLM) is VLLM_SENSITIVE_PATHS
-    assert path_table_for("sgl-project/sglang") is GENERIC_SENSITIVE_PATHS
-    pr = create_sample_pr(5, repo="sgl-project/sglang", files=["python/sglang/srt/managers/scheduler.py"])
+    assert path_table_for("example/other-repo") is GENERIC_SENSITIVE_PATHS
+    pr = create_sample_pr(5, repo="example/other-repo", files=["python/engine/managers/scheduler.py"])
     r = score_pr(pr, [])
     assert "Scheduler" in r.sensitive_areas and r.level in ("MEDIUM", "HIGH", "CRITICAL")
 

@@ -1,8 +1,8 @@
-# PR Radar — Live PR Engine for vLLM and SGLang
+# PR Radar — Live PR Engine for vLLM
 
 > **PR dependency DAGs, file-collision radar, change-risk scoring, review-flow tracking, and a merge impact simulator for high-velocity open-source repos.**
 
-`pr-radar` is a maintainer-side intelligence layer for repos like **vLLM** and **SGLang**. From GitHub PR metadata alone it surfaces multi-PR stacks, warns about concurrent file collisions, scores how risky each change is, shows whose move it is in the review loop, and simulates what landing any PR unblocks.
+`pr-radar` is a maintainer-side intelligence layer built for **vLLM**. From GitHub PR metadata alone it surfaces multi-PR stacks, warns about concurrent file collisions, scores how risky each change is, shows whose move it is in the review loop, and simulates what landing any PR unblocks.
 
 ## Who it is for
 
