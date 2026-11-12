@@ -1,4 +1,4 @@
-name: Sync vLLM PR Radar to Hugging Face Space
+name: Sync vLLM PR Radar Snapshot
 
 on:
   schedule:
@@ -8,12 +8,20 @@ on:
 jobs:
   sync-space:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - uses: actions/cache@v4
+        with:
+          path: data
+          key: vllm-pr-cache-${{ github.run_id }}
+          restore-keys: vllm-pr-cache-
 
       - name: Install dependencies
         run: |
@@ -26,6 +34,19 @@ jobs:
         run: |
           python3 -m pr_radar.cli sync --repo vllm-project/vllm --limit 0
           python3 -m pr_radar.cli export-site --repo vllm-project/vllm --out dist_hf
+
+      - name: Publish static bundle to static-site branch (Vercel)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tmpdir=$(mktemp -d)
+          cp -a dist_hf/. "$tmpdir/"
+          git -C "$tmpdir" init -b static-site
+          git -C "$tmpdir" config user.name "github-actions[bot]"
+          git -C "$tmpdir" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C "$tmpdir" add -A
+          git -C "$tmpdir" commit -m "Refresh vLLM PR Radar static snapshot"
+          git -C "$tmpdir" push --force "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:refs/heads/static-site
 
       - name: Upload bundle to Hugging Face Static Space
         env:

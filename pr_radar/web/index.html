@@ -578,6 +578,18 @@
       simulator: { path: '/simulator', el: 'pageSimulator', subsystems: false, title: 'Merge Simulator' },
     };
 
+    function usesQueryPageRouting() {
+      if (!window.PR_RADAR_STATIC) return false;
+      if (window.PR_RADAR_QUERY_ROUTES === true) return true;
+      if (window.PR_RADAR_QUERY_ROUTES === false) return false;
+      return /(?:^|\.)(?:hf\.space|huggingface\.co)$/i.test(window.location.hostname || '');
+    }
+
+    function hasMultipleRepos() {
+      const sel = document.getElementById('repoSelect');
+      return Boolean(sel && sel.options && sel.options.length > 1);
+    }
+
     function pageFromLocation() {
       const params = new URLSearchParams(window.location.search);
       const qPage = params.get('page');
@@ -592,12 +604,13 @@
 
     function pageHref(page, extra = {}) {
       const qs = new URLSearchParams();
-      if (window.PR_RADAR_STATIC && page !== 'overview') qs.set('page', page);
-      if (REPO) qs.set('repo', REPO);
+      const queryRouting = usesQueryPageRouting();
+      if (queryRouting && page !== 'overview') qs.set('page', page);
+      if (REPO && hasMultipleRepos()) qs.set('repo', REPO);
       Object.entries(extra).forEach(([k, v]) => {
         if (v !== undefined && v !== null && v !== '') qs.set(k, String(v));
       });
-      const base = window.PR_RADAR_STATIC ? '/' : PAGE_ROUTES[page].path;
+      const base = queryRouting ? '/' : PAGE_ROUTES[page].path;
       const q = qs.toString();
       return `${base}${q ? '?' + q : ''}`;
     }
@@ -891,7 +904,7 @@
 
     function syncBrowserUrl(push = false) {
       const u = new URL(window.location.href);
-      if (window.PR_RADAR_STATIC) {
+      if (usesQueryPageRouting()) {
         u.pathname = '/';
         if (activePage !== 'overview') u.searchParams.set('page', activePage);
         else u.searchParams.delete('page');
@@ -899,7 +912,7 @@
         u.pathname = PAGE_ROUTES[activePage].path;
         u.searchParams.delete('page');
       }
-      if (REPO) u.searchParams.set('repo', REPO); else u.searchParams.delete('repo');
+      if (REPO && hasMultipleRepos()) u.searchParams.set('repo', REPO); else u.searchParams.delete('repo');
       if (currentFilter !== 'ALL') u.searchParams.set('subsystem', currentFilter); else u.searchParams.delete('subsystem');
       if (searchQuery) u.searchParams.set('q', searchQuery); else u.searchParams.delete('q');
       if (activePage === 'collisions' && activeCollisionFile) u.searchParams.set('file', activeCollisionFile); else u.searchParams.delete('file');

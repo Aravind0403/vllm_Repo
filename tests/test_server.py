@@ -168,5 +168,9 @@ def test_export_static_site_bundle(tmp_path):
     assert (tmp_path / "404.html").exists()
     for route in SPACE_ROUTES:
         assert (tmp_path / route / "index.html").exists()
+    assert (tmp_path / "vercel.json").exists()
+    vercel_cfg = (tmp_path / "vercel.json").read_text(encoding="utf-8")
+    assert '"cleanUrls": true' in vercel_cfg
+    assert "/index.html" in vercel_cfg
     for name in ("overview.json", "health.json", "subsystems.json", "dag.json", "hotspots.json", "collisions.json", "reviewers.json", "dossiers.json"):
         assert (tmp_path / "static-data" / name).exists()

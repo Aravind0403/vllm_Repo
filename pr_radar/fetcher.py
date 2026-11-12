@@ -376,6 +376,8 @@ class GitHubFetcher:
             cursor = page_info.get("endCursor")
             if not unlimited:
                 remaining -= len(nodes)
+            if page_size < self.PAGE_SIZE:
+                page_size = min(self.PAGE_SIZE, page_size + 5)
             if not page_info.get("hasNextPage", False) or not nodes:
                 break
 

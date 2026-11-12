@@ -111,7 +111,7 @@ def export_static_site(eng: PRRadarEngine, out_dir: str | Path) -> Dict[str, Any
         "prs_indexed": len(eng.prs),
         "last_synced_at": eng.last_synced_at.isoformat() if eng.last_synced_at else None,
         "sync_mode": "static-snapshot",
-        "sync_note": "HF Static Space snapshot",
+        "sync_note": "Static snapshot",
         "offline": True,
         "refreshing": False,
         "sync_ttl_minutes": 30.0,
@@ -196,6 +196,21 @@ def export_static_site(eng: PRRadarEngine, out_dir: str | Path) -> Dict[str, Any
 
     (out / "README.md").write_text(
         _space_readme(eng.repo_slug, len(eng.prs), len(chains)),
+        encoding="utf-8",
+    )
+
+    vercel_config = {
+        "cleanUrls": True,
+        "trailingSlash": False,
+        "rewrites": [
+            {
+                "source": f"/({'|'.join(SPACE_ROUTES)})",
+                "destination": "/index.html",
+            }
+        ],
+    }
+    (out / "vercel.json").write_text(
+        json.dumps(vercel_config, indent=2) + "\n",
         encoding="utf-8",
     )
 
