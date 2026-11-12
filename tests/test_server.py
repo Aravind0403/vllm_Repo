@@ -153,3 +153,20 @@ def test_reviewers_search_filters_by_handle():
         matched = client.get("/api/v1/reviewers", params={"search": handle[:4]}).json()
         assert any(r["reviewer"] == handle for r in matched)
         assert all(handle[:4].lower() in r["reviewer"].lower() for r in matched)
+
+
+def test_export_static_site_bundle(tmp_path):
+    from pr_radar.engine import PRRadarEngine
+    from pr_radar.static_exporter import SPACE_ROUTES, export_static_site
+
+    eng = PRRadarEngine("vllm-project/vllm", offline=True).sync(limit=0)
+    summary = export_static_site(eng, tmp_path)
+    assert summary["prs"] == len(eng.prs)
+    assert (tmp_path / "README.md").exists()
+    assert "sdk: static" in (tmp_path / "README.md").read_text(encoding="utf-8")
+    assert "window.PR_RADAR_STATIC = true" in (tmp_path / "index.html").read_text(encoding="utf-8")
+    assert (tmp_path / "404.html").exists()
+    for route in SPACE_ROUTES:
+        assert (tmp_path / route / "index.html").exists()
+    for name in ("overview.json", "health.json", "subsystems.json", "dag.json", "hotspots.json", "collisions.json", "reviewers.json", "dossiers.json"):
+        assert (tmp_path / "static-data" / name).exists()

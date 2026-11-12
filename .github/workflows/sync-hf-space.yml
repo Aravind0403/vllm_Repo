@@ -1,0 +1,45 @@
+name: Sync vLLM PR Radar to Hugging Face Space
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+jobs:
+  sync-space:
+    if: ${{ env.HAS_HF_TOKEN == 'true' }}
+    runs-on: ubuntu-latest
+    env:
+      HAS_HF_TOKEN: ${{ secrets.HF_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install -e .
+          pip install -U huggingface_hub
+
+      - name: Sync vLLM PRs and export static bundle
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 -m pr_radar.cli sync --repo vllm-project/vllm --limit 0
+          python3 -m pr_radar.cli export-site --repo vllm-project/vllm --out dist_hf
+
+      - name: Upload bundle to Hugging Face Static Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python3 -c '
+          from huggingface_hub import HfApi
+          HfApi().upload_folder(
+              folder_path="dist_hf",
+              repo_id="Aravind0495/vllm-pr-radar",
+              repo_type="space",
+              commit_message="Refresh vLLM PR Radar snapshot",
+          )
+          '

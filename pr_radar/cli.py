@@ -384,6 +384,17 @@ def cmd_export(args):
     console.print(f"[bold green]✓[/bold green] Exported comprehensive PR Radar data to [bold cyan]{out_file}[/bold cyan]")
 
 
+def cmd_export_site(args):
+    from .static_exporter import export_static_site
+
+    engine = _load_engine(args.repo)
+    summary = export_static_site(engine, args.out)
+    console.print(
+        f"[bold green]✓[/bold green] Exported static Space bundle to [bold cyan]{summary['out_dir']}[/bold cyan] "
+        f"({summary['prs']} PRs, {summary['collisions_exported']} collisions, {summary['total_mb']} MB)"
+    )
+
+
 def cmd_dashboard(args):
     import webbrowser
     import http.server
@@ -509,6 +520,10 @@ def main():
     export_p = subparsers.add_parser("export", help="Export full data engine state to JSON", parents=[base_parser])
     export_p.add_argument("--out", default="pr_radar_export.json", help="Output file path")
 
+    # export-site
+    site_p = subparsers.add_parser("export-site", help="Export static web bundle (Hugging Face Static Space / Pages)", parents=[base_parser])
+    site_p.add_argument("--out", default="dist_hf", help="Output directory")
+
     # dashboard
     dash_p = subparsers.add_parser("dashboard", help="Launch the interactive visual web dashboard", parents=[base_parser])
     dash_p.add_argument("--refresh", action="store_true", help="Bypass local cache and re-fetch from GitHub")
@@ -533,6 +548,8 @@ def main():
         cmd_reviewers(args)
     elif args.command == "export":
         cmd_export(args)
+    elif args.command == "export-site":
+        cmd_export_site(args)
 
 
 if __name__ == "__main__":

@@ -74,9 +74,9 @@
         <i class="ph ph-arrows-clockwise text-sm" id="syncIcon"></i>
         <span>Sync</span>
       </button>
-      <a href="/docs" target="_blank" rel="noopener" class="hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-dark-850 hover:bg-slate-800 text-slate-400 hover:text-slate-200 text-xs border border-slate-800 transition" title="OpenAPI Docs">
+      <a id="apiDocsLink" href="/docs" target="_blank" rel="noopener" class="hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-dark-850 hover:bg-slate-800 text-slate-400 hover:text-slate-200 text-xs border border-slate-800 transition" title="OpenAPI Docs">
         <i class="ph ph-code text-sm"></i>
-        <span>API</span>
+        <span id="apiDocsLabel">API</span>
       </a>
     </div>
   </header>
@@ -578,11 +578,28 @@
       simulator: { path: '/simulator', el: 'pageSimulator', subsystems: false, title: 'Merge Simulator' },
     };
 
-    function pageFromPath(pathname) {
-      const clean = (pathname || '/').replace(/\/+$/, '') || '/';
+    function pageFromLocation() {
+      const params = new URLSearchParams(window.location.search);
+      const qPage = params.get('page');
+      if (qPage && PAGE_ROUTES[qPage]) return qPage;
+      const hashPage = (window.location.hash || '').replace(/^#\/?/, '').split('?')[0];
+      if (hashPage && PAGE_ROUTES[hashPage]) return hashPage;
+      const clean = (window.location.pathname || '/').replace(/\/+$/, '') || '/';
       if (clean === '/' || clean === '/overview') return 'overview';
       const key = clean.slice(1);
       return PAGE_ROUTES[key] ? key : 'overview';
+    }
+
+    function pageHref(page, extra = {}) {
+      const qs = new URLSearchParams();
+      if (window.PR_RADAR_STATIC && page !== 'overview') qs.set('page', page);
+      if (REPO) qs.set('repo', REPO);
+      Object.entries(extra).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && v !== '') qs.set(k, String(v));
+      });
+      const base = window.PR_RADAR_STATIC ? '/' : PAGE_ROUTES[page].path;
+      const q = qs.toString();
+      return `${base}${q ? '?' + q : ''}`;
     }
 
     const initParams = new URLSearchParams(window.location.search);
@@ -590,7 +607,7 @@
     let currentFilter = initParams.get('subsystem') || 'ALL';
     let searchQuery = (initParams.get('q') || '').toLowerCase();
     let dagScope = initParams.get('scope') || 'stacks';
-    let activePage = pageFromPath(window.location.pathname);
+    let activePage = pageFromLocation();
 
     let lastOverview = null;
     let lastDagData = null;
@@ -621,6 +638,237 @@
       return `${API_BASE}${path}${q ? '?' + q : ''}`;
     }
 
+    const _staticJsonCache = {};
+    async function loadStaticJson(file) {
+      if (!_staticJsonCache[file]) {
+        const res = await fetch(`/static-data/${file}`);
+        if (!res.ok) throw new Error(`Failed loading /static-data/${file}: ${res.status}`);
+        _staticJsonCache[file] = await res.json();
+      }
+      return _staticJsonCache[file];
+    }
+
+    function compileSubsystemRegex(pattern) {
+      if (!pattern || pattern === 'ALL') return null;
+      return new RegExp(pattern.replace(/^\(\?i\)/, ''), 'i');
+    }
+
+    async function staticApiFetch(path, params = {}) {
+      const ok = data => ({ ok: true, status: 200, json: async () => data });
+      const err = (status, detail) => ({ ok: false, status, json: async () => ({ detail }) });
+
+      if (path === '/overview') return ok(await loadStaticJson('overview.json'));
+      if (path === '/health') return ok(await loadStaticJson('health.json'));
+      if (path === '/subsystems') return ok(await loadStaticJson('subsystems.json'));
+
+      if (path === '/dag') {
+        const full = await loadStaticJson('dag.json');
+        const scope = params.scope || 'stacks';
+        const re = compileSubsystemRegex(params.subsystem);
+        const chained = new Set();
+        (full.chains || []).forEach(c => c.forEach(num => chained.add(num)));
+
+        const nodes = [];
+        const included = new Set();
+        const nodeMap = {};
+        (full.nodes || []).forEach(n => { nodeMap[n.id] = n; });
+        (full.nodes || []).forEach(n => {
+          if (n.is_external) return;
+          if (scope === 'stacks' && !chained.has(n.id)) return;
+          if (re && !re.test(n.title || '')) return;
+          nodes.push(n);
+          included.add(n.id);
+        });
+        const matched = new Set(included);
+        const chains = (full.chains || []).filter(c => !re || c.some(num => matched.has(num)));
+        const cycles = (full.cycles || []).filter(c => !re || c.some(num => matched.has(num)));
+        const edges = [];
+        const seenEdges = new Set();
+        chains.forEach(chain => {
+          for (let i = 0; i < chain.length - 1; i++) {
+            const baseNum = chain[i], waitingNum = chain[i + 1];
+            [baseNum, waitingNum].forEach(num => {
+              if (!included.has(num) && nodeMap[num]) {
+                nodes.push(nodeMap[num]);
+                included.add(num);
+              }
+            });
+            const k = `${waitingNum}->${baseNum}`;
+            if (!seenEdges.has(k)) {
+              seenEdges.add(k);
+              edges.push({ from: waitingNum, to: baseNum, kind: 'stacked_on' });
+            }
+          }
+        });
+        return ok({ repo: full.repo, scope, nodes, edges, chains, cycles });
+      }
+
+      if (path === '/hotspots') {
+        const all = await loadStaticJson('hotspots.json');
+        const dossiers = await loadStaticJson('dossiers.json');
+        const re = compileSubsystemRegex(params.subsystem);
+        const limit = Number(params.limit || 15);
+        const rows = [];
+        for (const h of all) {
+          if (re) {
+            const pathMatch = re.test(h.path || '');
+            const prMatch = (h.pr_numbers || []).some(n => {
+              const d = dossiers[String(n)];
+              return d && re.test(d.title || '');
+            });
+            if (!pathMatch && !prMatch) continue;
+          }
+          rows.push(h);
+          if (rows.length >= limit) break;
+        }
+        return ok(rows);
+      }
+
+      if (path === '/collisions') {
+        const all = await loadStaticJson('collisions.json');
+        const re = compileSubsystemRegex(params.subsystem);
+        const q = params.search ? String(params.search).toLowerCase() : null;
+        const limit = Number(params.limit || 200);
+        const out = [];
+        for (const c of all) {
+          if (params.min_risk && c.risk_level !== params.min_risk) continue;
+          if (params.live_only === 'true' && !c.is_live_race) continue;
+          if (params.file && !(c.overlapping_files || []).includes(params.file)) continue;
+          if (re && !(re.test(c.pr_a_title || '') || re.test(c.pr_b_title || '') || (c.overlapping_files || []).some(f => re.test(f)))) continue;
+          if (q && !(
+            String(c.pr_a).includes(q) || String(c.pr_b).includes(q)
+            || (c.pr_a_title || '').toLowerCase().includes(q) || (c.pr_b_title || '').toLowerCase().includes(q)
+            || (c.pr_a_author || '').toLowerCase().includes(q) || (c.pr_b_author || '').toLowerCase().includes(q)
+            || (c.overlapping_files || []).some(f => f.toLowerCase().includes(q))
+          )) continue;
+          out.push(c);
+          if (limit > 0 && out.length >= limit) break;
+        }
+        return ok(out);
+      }
+
+      if (path === '/triage') {
+        const dossiers = await loadStaticJson('dossiers.json');
+        const re = compileSubsystemRegex(params.subsystem);
+        const q = params.search ? String(params.search).toLowerCase() : null;
+        const perCol = Number(params.per_column || 60);
+        const cols = { ready_to_merge: [], blocked_by_dep: [], waiting_review: [], waiting_author: [], failing_ci: [], draft: [] };
+        Object.values(dossiers).forEach(d => {
+          if (re && !re.test(d.title || '')) return;
+          if (q && !((d.title || '').toLowerCase().includes(q) || (d.author || '').toLowerCase().includes(q) || String(d.number).includes(q))) return;
+          if (d.is_draft) cols.draft.push(d);
+          else if (d.status === 'READY_TO_MERGE') cols.ready_to_merge.push(d);
+          else if (d.status === 'BLOCKED_BY_DEP') cols.blocked_by_dep.push(d);
+          else if (d.status === 'CI_FAILURE' || d.status === 'CONFLICTING') cols.failing_ci.push(d);
+          else if (d.status === 'CHANGES_REQUESTED') cols.waiting_author.push(d);
+          else cols.waiting_review.push(d);
+        });
+        const totals = {};
+        Object.keys(cols).forEach(k => {
+          totals[k] = cols[k].length;
+          cols[k].sort((a, b) => (b.risk_score || 0) - (a.risk_score || 0));
+          if (perCol > 0) cols[k] = cols[k].slice(0, perCol);
+        });
+        cols._totals = totals;
+        return ok(cols);
+      }
+
+      if (path === '/reviewers') {
+        let rows = await loadStaticJson('reviewers.json');
+        if (params.search) {
+          const q = String(params.search).toLowerCase();
+          rows = rows.filter(r => (r.reviewer || '').toLowerCase().includes(q));
+        }
+        return ok(rows.slice(0, Number(params.limit || 50)));
+      }
+
+      if (path.startsWith('/prs/')) {
+        const num = path.slice('/prs/'.length);
+        const dossiers = await loadStaticJson('dossiers.json');
+        return dossiers[num] ? ok(dossiers[num]) : err(404, `PR #${num} not found in snapshot`);
+      }
+
+      if (path.startsWith('/simulate/merge/')) {
+        const prNum = Number(path.slice('/simulate/merge/'.length));
+        const [dag, dossiers, collisions] = await Promise.all([
+          loadStaticJson('dag.json'),
+          loadStaticJson('dossiers.json'),
+          loadStaticJson('collisions.json'),
+        ]);
+        const nodeMap = {};
+        (dag.nodes || []).forEach(n => { nodeMap[n.id] = n; });
+        const target = dossiers[String(prNum)] || nodeMap[prNum];
+        if (!target) return err(404, `PR #${prNum} not found in index or graph`);
+
+        const dependents = [];
+        const blockersByPr = {};
+        (dag.edges || []).forEach(e => {
+          blockersByPr[e.from] = blockersByPr[e.from] || [];
+          blockersByPr[e.from].push(e.to);
+          if (e.to === prNum && !dependents.includes(e.from)) dependents.push(e.from);
+        });
+        const unblocked_prs = dependents.map(depNum => {
+          const dep = dossiers[String(depNum)] || nodeMap[depNum] || {};
+          const other = (blockersByPr[depNum] || []).filter(b => b !== prNum);
+          return {
+            pr_number: depNum,
+            title: dep.title || `PR #${depNum}`,
+            author: dep.author || 'External',
+            ci_status: dep.ci_status || 'UNKNOWN',
+            fully_unblocked: other.length === 0,
+            remaining_blockers: other,
+          };
+        });
+        const seenHazard = new Set();
+        const collision_hazards = [];
+        const addHazard = (otherNum, riskLevel, sharedChurn, files, liveRace) => {
+          if (seenHazard.has(otherNum)) return;
+          seenHazard.add(otherNum);
+          const other = dossiers[String(otherNum)] || {};
+          collision_hazards.push({
+            pr_number: otherNum,
+            title: other.title || `PR #${otherNum}`,
+            author: other.author || 'Unknown',
+            risk_level: riskLevel,
+            shared_churn: sharedChurn || 0,
+            overlapping_files: files || [],
+            is_live_race: Boolean(liveRace),
+          });
+        };
+        collisions.forEach(c => {
+          if (c.pr_a === prNum || c.pr_b === prNum) {
+            addHazard(c.pr_a === prNum ? c.pr_b : c.pr_a, c.risk_level, c.shared_churn, c.overlapping_files, c.is_live_race);
+          }
+        });
+        if (dossiers[String(prNum)] && dossiers[String(prNum)].collisions) {
+          dossiers[String(prNum)].collisions.forEach(c => {
+            addHazard(c.colliding_pr, c.risk_level, 0, c.overlapping_files, c.is_live_race);
+          });
+        }
+        return ok({
+          merged_pr: {
+            number: prNum,
+            title: target.title || `PR #${prNum}`,
+            author: target.author || 'External',
+            ci_status: target.ci_status || 'UNKNOWN',
+          },
+          unblocks_count: unblocked_prs.length,
+          unblocked_prs,
+          collision_hazards_count: collision_hazards.length,
+          collision_hazards,
+        });
+      }
+
+      return err(404, `Unsupported static endpoint: ${path}`);
+    }
+
+    async function apiFetch(path, params = {}, options = undefined) {
+      if (window.PR_RADAR_STATIC && (!options || !options.method || options.method === 'GET')) {
+        return staticApiFetch(path, params);
+      }
+      return fetch(apiUrl(path, params), options);
+    }
+
     function syncRepoSelector(repoSlug) {
       if (!repoSlug) return;
       REPO = repoSlug;
@@ -643,7 +891,14 @@
 
     function syncBrowserUrl(push = false) {
       const u = new URL(window.location.href);
-      u.pathname = PAGE_ROUTES[activePage].path;
+      if (window.PR_RADAR_STATIC) {
+        u.pathname = '/';
+        if (activePage !== 'overview') u.searchParams.set('page', activePage);
+        else u.searchParams.delete('page');
+      } else {
+        u.pathname = PAGE_ROUTES[activePage].path;
+        u.searchParams.delete('page');
+      }
       if (REPO) u.searchParams.set('repo', REPO); else u.searchParams.delete('repo');
       if (currentFilter !== 'ALL') u.searchParams.set('subsystem', currentFilter); else u.searchParams.delete('subsystem');
       if (searchQuery) u.searchParams.set('q', searchQuery); else u.searchParams.delete('q');
@@ -747,7 +1002,7 @@
     // Load Header Overview & Subsystems
     async function fetchOverview() {
       try {
-        const [ovRes, hRes] = await Promise.all([fetch(apiUrl('/overview')), fetch(apiUrl('/health'))]);
+        const [ovRes, hRes] = await Promise.all([apiFetch('/overview'), apiFetch('/health')]);
         const d = await ovRes.json();
         const h = await hRes.json();
         lastOverview = d;
@@ -772,7 +1027,7 @@
       const bar = document.getElementById('subsystemFilterBar');
       if (!bar) return;
       try {
-        const res = await fetch(apiUrl('/subsystems'));
+        const res = await apiFetch('/subsystems');
         const subsystems = await res.json();
         const pills = [{ name: 'All', pattern: 'ALL', count: null }].concat(
           (subsystems || []).map(s => ({
@@ -814,6 +1069,14 @@
     }
 
     async function triggerSync() {
+      if (window.PR_RADAR_STATIC) {
+        Object.keys(_staticJsonCache).forEach(k => delete _staticJsonCache[k]);
+        await fetchOverview();
+        await fetchSubsystems();
+        await loadActivePage();
+        alert('Loaded latest static snapshot. For live GitHub GraphQL polling on-demand, run `pr-radar serve` locally or trigger the GitHub Actions Space sync.');
+        return;
+      }
       const syncBtn = document.getElementById('syncBtn');
       const syncIcon = document.getElementById('syncIcon');
       syncIcon.classList.add('animate-spin');
@@ -843,12 +1106,12 @@
       const wb = d.waiting_on_breakdown || {};
 
       document.getElementById('overviewKpis').innerHTML = [
-        { label: 'Open PRs Indexed', val: d.total_open_prs, sub: `${sb.READY_TO_MERGE || 0} ready to merge`, href: '/triage', page: 'triage', accent: 'text-emerald-400 border-emerald-500/20' },
-        { label: 'Dependency Stacks', val: d.dependency_stacks_count, sub: `${(d.foundational_unblockers || []).length} foundational bases`, href: '/dag', page: 'dag', accent: 'text-fuchsia-400 border-fuchsia-500/20' },
-        { label: 'Critical File Collisions', val: d.critical_file_collisions, sub: `${highCrit} high/critical risk PRs`, href: '/collisions', page: 'collisions', accent: 'text-rose-400 border-rose-500/20' },
-        { label: 'Median Reviewer Wait', val: `${d.median_reviewer_wait_days ?? 0}d`, sub: `${wb.REVIEWER || 0} PRs waiting on review`, href: '/reviewers', page: 'reviewers', accent: 'text-violet-400 border-violet-500/20' },
+        { label: 'Open PRs Indexed', val: d.total_open_prs, sub: `${sb.READY_TO_MERGE || 0} ready to merge`, page: 'triage', accent: 'text-emerald-400 border-emerald-500/20' },
+        { label: 'Dependency Stacks', val: d.dependency_stacks_count, sub: `${(d.foundational_unblockers || []).length} foundational bases`, page: 'dag', accent: 'text-fuchsia-400 border-fuchsia-500/20' },
+        { label: 'Critical File Collisions', val: d.critical_file_collisions, sub: `${highCrit} high/critical risk PRs`, page: 'collisions', accent: 'text-rose-400 border-rose-500/20' },
+        { label: 'Median Reviewer Wait', val: `${d.median_reviewer_wait_days ?? 0}d`, sub: `${wb.REVIEWER || 0} PRs waiting on review`, page: 'reviewers', accent: 'text-violet-400 border-violet-500/20' },
       ].map(k => `
-        <a href="${k.href}" onclick="return navClick(event, '${k.page}')" class="bg-dark-900 border ${k.accent} hover:border-slate-600 rounded-xl p-4 transition block">
+        <a href="${pageHref(k.page)}" onclick="return navClick(event, '${k.page}')" class="bg-dark-900 border ${k.accent} hover:border-slate-600 rounded-xl p-4 transition block">
           <div class="text-xs text-slate-400 font-medium">${k.label}</div>
           <div class="text-2xl font-bold mt-1 font-mono ${k.accent.split(' ')[0]}">${k.val}</div>
           <div class="text-[11px] text-slate-500 mt-1">${esc(k.sub)}</div>
@@ -906,7 +1169,7 @@
       `).join('');
 
       document.getElementById('overviewHotspots').innerHTML = (d.top_hotspot_files || []).map(h => `
-        <a href="/collisions?file=${encodeURIComponent(h.path)}${REPO ? '&repo=' + encodeURIComponent(REPO) : ''}"
+        <a href="${pageHref('collisions', { file: h.path })}"
            data-collision-file="${esc(h.path)}"
            class="overview-hotspot-link bg-dark-950 border border-slate-800 hover:border-slate-600 rounded-lg p-3 flex items-center justify-between gap-3 block">
           <span class="font-mono text-xs text-slate-200 truncate" title="${esc(h.path)}">${esc(h.path)}</span>
@@ -934,12 +1197,11 @@
 
     // PAGE 1: Dependency DAG
     async function fetchDag() {
-      const url = apiUrl('/dag', {
-        scope: dagScope,
-        subsystem: currentFilter !== 'ALL' ? currentFilter : null,
-      });
       try {
-        const res = await fetch(url);
+        const res = await apiFetch('/dag', {
+          scope: dagScope,
+          subsystem: currentFilter !== 'ALL' ? currentFilter : null,
+        });
         const data = await res.json();
         lastDagData = data;
         document.getElementById('dagStacksCount').textContent = data.chains ? data.chains.length : 0;
@@ -1093,11 +1355,10 @@
     }
 
     async function fetchHotspots() {
-      const url = apiUrl('/hotspots', {
-        subsystem: currentFilter !== 'ALL' ? currentFilter : null,
-      });
       try {
-        const res = await fetch(url);
+        const res = await apiFetch('/hotspots', {
+          subsystem: currentFilter !== 'ALL' ? currentFilter : null,
+        });
         lastHotspots = await res.json();
         document.getElementById('hotspotsCountBadge').textContent = lastHotspots.length;
         renderHotspots();
@@ -1166,16 +1427,15 @@
         pill.classList.remove('inline-flex');
       }
 
-      const url = apiUrl('/collisions', {
-        limit: 100,
-        subsystem: currentFilter !== 'ALL' ? currentFilter : null,
-        live_only: document.getElementById('liveOnlyToggle')?.checked ? 'true' : null,
-        min_risk: document.getElementById('minRiskCollisionSelect')?.value || null,
-        file: activeCollisionFile || null,
-        search: searchQuery || null,
-      });
       try {
-        const res = await fetch(url);
+        const res = await apiFetch('/collisions', {
+          limit: 100,
+          subsystem: currentFilter !== 'ALL' ? currentFilter : null,
+          live_only: document.getElementById('liveOnlyToggle')?.checked ? 'true' : null,
+          min_risk: document.getElementById('minRiskCollisionSelect')?.value || null,
+          file: activeCollisionFile || null,
+          search: searchQuery || null,
+        });
         const collisions = await res.json();
         document.getElementById('collisionsCountBadge').textContent = collisions.length;
 
@@ -1226,13 +1486,11 @@
     }
 
     async function fetchTriage() {
-      const url = apiUrl('/triage', {
-        subsystem: currentFilter !== 'ALL' ? currentFilter : null,
-        search: searchQuery || null,
-      });
-
       try {
-        const res = await fetch(url);
+        const res = await apiFetch('/triage', {
+          subsystem: currentFilter !== 'ALL' ? currentFilter : null,
+          search: searchQuery || null,
+        });
         const cols = await res.json();
 
         const colReady = document.getElementById('colReadyList');
@@ -1296,7 +1554,7 @@
 
     async function fetchReviewers() {
       try {
-        const res = await fetch(apiUrl('/reviewers', { limit: 100, search: searchQuery || null }));
+        const res = await apiFetch('/reviewers', { limit: 100, search: searchQuery || null });
         const rows = await res.json();
         document.getElementById('colCountReviewers').textContent = rows.length;
         if (lastOverview) {
@@ -1341,7 +1599,7 @@
     // PAGE 5: Merge Impact Simulator
     async function populateSimulationOptions() {
       try {
-        const res = await fetch(apiUrl('/dag', { scope: 'stacks' }));
+        const res = await apiFetch('/dag', { scope: 'stacks' });
         const data = await res.json();
         const select = document.getElementById('simPrSelect');
         select.innerHTML = '<option value="">Choose a stacked PR to simulate merge...</option>';
@@ -1361,7 +1619,7 @@
       const errBox = document.getElementById('simError');
       errBox.classList.add('hidden');
       try {
-        const res = await fetch(apiUrl(`/simulate/merge/${prNum}`));
+        const res = await apiFetch(`/simulate/merge/${prNum}`);
         if (!res.ok) {
           const err = await res.json().catch(() => ({ detail: `PR #${prNum} not found` }));
           errBox.textContent = err.detail || `Could not simulate PR #${prNum}`;
@@ -1434,7 +1692,7 @@
     // Dossier Slide-Over Drawer
     async function openDrawer(prNum) {
       try {
-        const res = await fetch(apiUrl(`/prs/${prNum}`));
+        const res = await apiFetch(`/prs/${prNum}`);
         if (!res.ok) return;
         const dossier = await res.json();
 
@@ -1580,7 +1838,7 @@
 
     window.addEventListener('popstate', async () => {
       const params = new URLSearchParams(window.location.search);
-      activePage = pageFromPath(window.location.pathname);
+      activePage = pageFromLocation();
       activeCollisionFile = params.get('file') || '';
       currentFilter = params.get('subsystem') || 'ALL';
       searchQuery = (params.get('q') || '').toLowerCase();
@@ -1592,6 +1850,15 @@
     });
 
     window.addEventListener('DOMContentLoaded', async () => {
+      if (window.PR_RADAR_STATIC) {
+        const apiLink = document.getElementById('apiDocsLink');
+        const apiLbl = document.getElementById('apiDocsLabel');
+        if (apiLink) { apiLink.href = '/static-data/overview.json'; apiLink.title = 'Snapshot JSON'; }
+        if (apiLbl) apiLbl.textContent = 'JSON';
+        document.querySelectorAll('.nav-link').forEach(a => {
+          if (a.dataset.page) a.setAttribute('href', pageHref(a.dataset.page));
+        });
+      }
       if (searchQuery) {
         document.getElementById('searchInput').value = searchQuery;
         document.getElementById('clearSearchBtn').classList.remove('hidden');
