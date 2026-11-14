@@ -419,6 +419,102 @@ def get_reviewers(
     return [rl.model_dump() for rl in rows[:limit]]
 
 
+@app.get("/api/v1/reviewers/{reviewer_handle}")
+def get_reviewer_inbox(
+    reviewer_handle: str,
+    repo: Optional[str] = Query(None),
+) -> Dict[str, Any]:
+    """
+    Actionable Executive Review Inbox for a specific reviewer:
+    Partitions pending PRs into Decision-Ready, Stack Unblockers, Quick Wins, and Waiting on Author/Stale.
+    """
+    eng = get_engine(repo)
+    handle_lower = reviewer_handle.strip().lower()
+    r_matches = [r for r in eng.reviewer_load if r.reviewer.lower() == handle_lower]
+    summary = r_matches[0].model_dump() if r_matches else {
+        "reviewer": reviewer_handle,
+        "pending_requests": 0,
+        "reviews_submitted": 0,
+        "approvals": 0,
+        "changes_requested": 0,
+        "pending_pr_numbers": [],
+        "oldest_pending_days": 0.0,
+    }
+
+    pending_nums = set(summary.get("pending_pr_numbers", []))
+    for pr in eng.prs:
+        analysis = eng.analyses.get(pr.number)
+        flow = analysis.review_flow if analysis else None
+        if flow and any(req.lower() == handle_lower for req in flow.requested_reviewers):
+            pending_nums.add(pr.number)
+
+    dossiers = [eng.get_pr_dossier(n) for n in pending_nums if eng.get_pr_dossier(n) is not None]
+
+    ready_decision = []
+    stack_unblockers = []
+    quick_wins = []
+    stale_or_author = []
+
+    for d in dossiers:
+        flow = d.get("review_flow") or {}
+        status = d.get("status")
+        ci = d.get("ci_status")
+        is_draft = d.get("is_draft", False)
+        blocks = d.get("blocks") or []
+        files = d.get("files_changed_count", 0)
+        lines = d.get("lines_changed", 0)
+        waiting_on = flow.get("waiting_on")
+
+        if len(blocks) > 0:
+            stack_unblockers.append(d)
+        if (
+            waiting_on == "REVIEWER"
+            and not is_draft
+            and ci in ("SUCCESS", "PENDING", "UNKNOWN")
+            and status not in ("CONFLICTING", "CI_FAILURE", "BLOCKED_BY_DEP", "DRAFT")
+        ):
+            ready_decision.append(d)
+        elif (
+            waiting_on == "AUTHOR"
+            or status in ("CHANGES_REQUESTED", "CI_FAILURE", "CONFLICTING", "DRAFT")
+            or is_draft
+            or d.get("staleness_days", 0) >= 45
+        ):
+            stale_or_author.append(d)
+        if (
+            (files <= 3 or (lines is not None and lines <= 60) or d.get("risk_level") == "LOW")
+            and not is_draft
+            and ci == "SUCCESS"
+            and status not in ("CONFLICTING", "CI_FAILURE")
+        ):
+            quick_wins.append(d)
+
+    ready_decision.sort(key=lambda x: x.get("risk_score", 0), reverse=True)
+    stack_unblockers.sort(key=lambda x: len(x.get("blocks", [])), reverse=True)
+    quick_wins.sort(key=lambda x: (x.get("lines_changed") or 0))
+    stale_or_author.sort(key=lambda x: x.get("staleness_days", 0), reverse=True)
+    dossiers.sort(key=lambda x: x.get("risk_score", 0), reverse=True)
+
+    return {
+        "reviewer": summary.get("reviewer", reviewer_handle),
+        "summary": summary,
+        "counts": {
+            "ready_decision": len(ready_decision),
+            "stack_unblockers": len(stack_unblockers),
+            "quick_wins": len(quick_wins),
+            "stale_or_author": len(stale_or_author),
+            "all_pending": len(dossiers),
+        },
+        "buckets": {
+            "ready_decision": ready_decision,
+            "stack_unblockers": stack_unblockers,
+            "quick_wins": quick_wins,
+            "stale_or_author": stale_or_author,
+            "all_pending": dossiers,
+        },
+    }
+
+
 @app.get("/api/v1/prs/{pr_number}")
 def get_pr_details(pr_number: int, repo: Optional[str] = Query(None)) -> Dict[str, Any]:
     eng = get_engine(repo)

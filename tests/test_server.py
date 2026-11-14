@@ -155,6 +155,20 @@ def test_reviewers_search_filters_by_handle():
         assert all(handle[:4].lower() in r["reviewer"].lower() for r in matched)
 
 
+def test_reviewer_inbox_drilldown():
+    res = client.get("/api/v1/reviewers/njhill")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["reviewer"].lower() == "njhill"
+    assert "counts" in data
+    assert "buckets" in data
+    for bucket in ("ready_decision", "stack_unblockers", "quick_wins", "stale_or_author", "all_pending"):
+        assert bucket in data["counts"]
+        assert bucket in data["buckets"]
+        assert isinstance(data["buckets"][bucket], list)
+    assert data["counts"]["all_pending"] == len(data["buckets"]["all_pending"])
+
+
 def test_export_static_site_bundle(tmp_path):
     from pr_radar.engine import PRRadarEngine
     from pr_radar.static_exporter import SPACE_ROUTES, export_static_site

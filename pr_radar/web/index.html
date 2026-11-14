@@ -375,18 +375,95 @@
       </div>
     </section>
 
-    <!-- PAGE 4: Reviewer Load (Full Table Page) -->
+    <!-- PAGE 4: Reviewer Load & Action Inbox -->
     <section id="pageReviewers" class="page-view hidden w-full h-full overflow-y-auto p-6">
-      <div class="max-w-7xl mx-auto space-y-5">
+      <div class="max-w-7xl mx-auto space-y-6">
+
+        <!-- Selected Reviewer Action Inbox (Priority Executive Drilldown) -->
+        <div id="reviewerInboxCard" class="hidden bg-dark-900 border border-violet-500/40 rounded-xl p-5 shadow-2xl transition duration-200">
+          <!-- Header -->
+          <div class="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-800">
+            <div class="flex items-center gap-3">
+              <span class="w-11 h-11 rounded-xl bg-violet-500/15 border border-violet-500/30 flex items-center justify-center text-violet-300 text-xl font-bold font-mono">
+                @
+              </span>
+              <div>
+                <div class="flex items-center gap-2">
+                  <h2 id="inboxReviewerName" class="text-base font-bold text-white tracking-tight">@reviewer</h2>
+                  <a id="inboxGhLink" href="#" target="_blank" rel="noopener" class="text-xs text-slate-400 hover:text-white inline-flex items-center gap-1 font-mono">
+                    <i class="ph ph-github-logo"></i> GitHub
+                  </a>
+                  <span class="text-xs px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-300 font-semibold border border-violet-500/30 font-mono">Executive Review Inbox</span>
+                </div>
+                <div id="inboxStatChips" class="flex flex-wrap items-center gap-2 text-xs text-slate-400 mt-1 font-mono"></div>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <button onclick="clearSelectedReviewer()" class="px-3 py-1.5 rounded-lg bg-dark-850 hover:bg-slate-800 text-slate-300 hover:text-white text-xs border border-slate-700/80 transition flex items-center gap-1.5">
+                <i class="ph ph-arrow-left"></i> View All Reviewers
+              </button>
+            </div>
+          </div>
+
+          <!-- 4 Action Bucket Tabs -->
+          <div class="mt-4 flex flex-wrap items-center gap-2" id="inboxTabs">
+            <button onclick="switchInboxBucket('ready_decision')" id="tab_ready_decision" class="inbox-tab px-3 py-2 rounded-lg text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 transition flex items-center gap-2">
+              <span>🟢 Ready for Decision</span>
+              <span id="badge_ready_decision" class="px-1.5 py-0.5 rounded-full bg-dark-950 font-mono text-[11px] text-emerald-300 border border-emerald-500/30">0</span>
+            </button>
+            <button onclick="switchInboxBucket('stack_unblockers')" id="tab_stack_unblockers" class="inbox-tab px-3 py-2 rounded-lg text-xs font-semibold bg-dark-850 text-slate-400 hover:text-white border border-slate-800 transition flex items-center gap-2">
+              <span>⚡ High-Leverage Unblockers</span>
+              <span id="badge_stack_unblockers" class="px-1.5 py-0.5 rounded-full bg-dark-950 font-mono text-[11px] text-fuchsia-300 border border-fuchsia-500/30">0</span>
+            </button>
+            <button onclick="switchInboxBucket('quick_wins')" id="tab_quick_wins" class="inbox-tab px-3 py-2 rounded-lg text-xs font-semibold bg-dark-850 text-slate-400 hover:text-white border border-slate-800 transition flex items-center gap-2">
+              <span>⏱️ Quick Wins (&lt;60 churn)</span>
+              <span id="badge_quick_wins" class="px-1.5 py-0.5 rounded-full bg-dark-950 font-mono text-[11px] text-cyan-300 border border-cyan-500/30">0</span>
+            </button>
+            <button onclick="switchInboxBucket('stale_or_author')" id="tab_stale_or_author" class="inbox-tab px-3 py-2 rounded-lg text-xs font-semibold bg-dark-850 text-slate-400 hover:text-white border border-slate-800 transition flex items-center gap-2">
+              <span>💤 Waiting on Author / Stale CI</span>
+              <span id="badge_stale_or_author" class="px-1.5 py-0.5 rounded-full bg-dark-950 font-mono text-[11px] text-amber-400 border border-amber-500/30">0</span>
+            </button>
+            <button onclick="switchInboxBucket('all_pending')" id="tab_all_pending" class="inbox-tab px-3 py-2 rounded-lg text-xs font-semibold bg-dark-850 text-slate-400 hover:text-white border border-slate-800 transition flex items-center gap-2">
+              <span>📋 All Requests</span>
+              <span id="badge_all_pending" class="px-1.5 py-0.5 rounded-full bg-dark-950 font-mono text-[11px] text-slate-300 border border-slate-700">0</span>
+            </button>
+          </div>
+
+          <!-- Bucket Description Banner -->
+          <div id="inboxBucketDescription" class="mt-3 p-2.5 bg-dark-950/70 border border-slate-800/80 rounded-lg text-xs text-slate-300 flex flex-wrap items-center justify-between gap-2">
+            <span id="inboxBucketDescText">CI is passing and author addressed comments — ready for your review or approval.</span>
+            <span id="inboxBucketCountTag" class="font-mono text-slate-400 text-[11px]"></span>
+          </div>
+
+          <!-- PR List for Selected Bucket -->
+          <div class="mt-4 overflow-x-auto">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr class="border-b border-slate-800 text-slate-400 uppercase text-[10px] tracking-wider font-mono">
+                  <th class="py-2.5 px-3">PR</th>
+                  <th class="py-2.5 px-3">Title &amp; Subsystem</th>
+                  <th class="py-2.5 px-3">Author &amp; Wait</th>
+                  <th class="py-2.5 px-3">CI / Risk</th>
+                  <th class="py-2.5 px-3">Diff / Stack</th>
+                  <th class="py-2.5 px-3 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody id="inboxPrTableBody" class="divide-y divide-slate-800/60 font-sans"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Reviewer Directory Table -->
         <div class="bg-dark-900 border border-slate-800 rounded-xl p-5 shadow-lg">
           <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
             <div>
               <h2 class="text-sm font-bold text-white flex items-center gap-2">
                 <i class="ph-bold ph-users text-violet-400 text-base"></i>
-                Reviewer Queue &amp; Activity
+                Reviewer Directory &amp; Workload
                 <span id="colCountReviewers" class="text-xs px-2 py-0.5 rounded-full bg-dark-850 text-violet-300 font-mono border border-violet-500/30">0</span>
               </h2>
-              <p class="text-xs text-slate-400 mt-0.5">Pending review requests, oldest unanswered wait time, and submitted approvals / change requests</p>
+              <p class="text-xs text-slate-400 mt-0.5">Click any reviewer row to open their prioritized <strong>Action Inbox</strong></p>
             </div>
             <div id="reviewerWaitingSummary" class="text-xs text-slate-400 font-mono"></div>
           </div>
@@ -394,20 +471,21 @@
           <div class="overflow-x-auto">
             <table class="w-full text-left text-xs border-collapse">
               <thead>
-                <tr class="border-b border-slate-800 text-slate-400 uppercase text-[10px] tracking-wider">
+                <tr class="border-b border-slate-800 text-slate-400 uppercase text-[10px] tracking-wider font-mono">
                   <th class="py-2.5 px-3">Reviewer</th>
                   <th class="py-2.5 px-3 text-right">Pending Requests</th>
                   <th class="py-2.5 px-3 text-right">Oldest Wait</th>
                   <th class="py-2.5 px-3 text-right">Reviewed</th>
                   <th class="py-2.5 px-3 text-right">Approved</th>
                   <th class="py-2.5 px-3 text-right">Changes Req.</th>
-                  <th class="py-2.5 px-3">Pending PRs</th>
+                  <th class="py-2.5 px-3 text-right">Action</th>
                 </tr>
               </thead>
               <tbody id="reviewerTableBody" class="divide-y divide-slate-800/60"></tbody>
             </table>
           </div>
         </div>
+
       </div>
     </section>
 
@@ -631,6 +709,9 @@
     let soloShowLimit = 120;
     const expandedHotspots = new Set();
     const expandedReviewers = new Set();
+    let selectedReviewer = initParams.get('reviewer') || (searchQuery && activePage === 'reviewers' ? searchQuery : '');
+    let activeInboxBucket = 'ready_decision';
+    let lastInboxData = null;
 
     function esc(s) {
       return String(s ?? '')
@@ -795,6 +876,79 @@
         return ok(rows.slice(0, Number(params.limit || 50)));
       }
 
+      if (path.startsWith('/reviewers/') && path !== '/reviewers') {
+        const handle = decodeURIComponent(path.slice('/reviewers/'.length)).toLowerCase();
+        const revs = await loadStaticJson('reviewers.json');
+        const dossiersMap = await loadStaticJson('dossiers.json');
+        const rMatches = revs.filter(r => (r.reviewer || '').toLowerCase() === handle);
+        const summary = rMatches[0] || {
+          reviewer: handle,
+          pending_requests: 0,
+          reviews_submitted: 0,
+          approvals: 0,
+          changes_requested: 0,
+          pending_pr_numbers: [],
+          oldest_pending_days: 0.0,
+        };
+        const pendingNums = new Set(summary.pending_pr_numbers || []);
+        Object.values(dossiersMap).forEach(d => {
+          const reqs = ((d.review_flow || {}).requested_reviewers || []).map(x => String(x).toLowerCase());
+          if (reqs.includes(handle)) pendingNums.add(d.number);
+        });
+        const dossiers = Array.from(pendingNums).map(n => dossiersMap[String(n)]).filter(Boolean);
+
+        const ready_decision = [];
+        const stack_unblockers = [];
+        const quick_wins = [];
+        const stale_or_author = [];
+
+        dossiers.forEach(d => {
+          const flow = d.review_flow || {};
+          const status = d.status;
+          const ci = d.ci_status;
+          const is_draft = Boolean(d.is_draft);
+          const blocks = d.blocks || [];
+          const files = d.files_changed_count || 0;
+          const lines = d.lines_changed || 0;
+          const waiting_on = flow.waiting_on;
+
+          if (blocks.length > 0) stack_unblockers.push(d);
+          if (waiting_on === 'REVIEWER' && !is_draft && ['SUCCESS', 'PENDING', 'UNKNOWN'].includes(ci) && !['CONFLICTING', 'CI_FAILURE', 'BLOCKED_BY_DEP', 'DRAFT'].includes(status)) {
+            ready_decision.push(d);
+          } else if (waiting_on === 'AUTHOR' || ['CHANGES_REQUESTED', 'CI_FAILURE', 'CONFLICTING', 'DRAFT'].includes(status) || is_draft || (d.staleness_days || 0) >= 45) {
+            stale_or_author.push(d);
+          }
+          if ((files <= 3 || lines <= 60 || d.risk_level === 'LOW') && !is_draft && ci === 'SUCCESS' && !['CONFLICTING', 'CI_FAILURE'].includes(status)) {
+            quick_wins.push(d);
+          }
+        });
+
+        ready_decision.sort((a, b) => (b.risk_score || 0) - (a.risk_score || 0));
+        stack_unblockers.sort((a, b) => (b.blocks || []).length - (a.blocks || []).length);
+        quick_wins.sort((a, b) => (a.lines_changed || 0) - (b.lines_changed || 0));
+        stale_or_author.sort((a, b) => (b.staleness_days || 0) - (a.staleness_days || 0));
+        dossiers.sort((a, b) => (b.risk_score || 0) - (a.risk_score || 0));
+
+        return ok({
+          reviewer: summary.reviewer || handle,
+          summary,
+          counts: {
+            ready_decision: ready_decision.length,
+            stack_unblockers: stack_unblockers.length,
+            quick_wins: quick_wins.length,
+            stale_or_author: stale_or_author.length,
+            all_pending: dossiers.length,
+          },
+          buckets: {
+            ready_decision,
+            stack_unblockers,
+            quick_wins,
+            stale_or_author,
+            all_pending: dossiers,
+          }
+        });
+      }
+
       if (path.startsWith('/prs/')) {
         const num = path.slice('/prs/'.length);
         const dossiers = await loadStaticJson('dossiers.json');
@@ -916,6 +1070,7 @@
       if (currentFilter !== 'ALL') u.searchParams.set('subsystem', currentFilter); else u.searchParams.delete('subsystem');
       if (searchQuery) u.searchParams.set('q', searchQuery); else u.searchParams.delete('q');
       if (activePage === 'collisions' && activeCollisionFile) u.searchParams.set('file', activeCollisionFile); else u.searchParams.delete('file');
+      if (activePage === 'reviewers' && selectedReviewer) u.searchParams.set('reviewer', selectedReviewer); else u.searchParams.delete('reviewer');
       if (push) window.history.pushState({}, '', u.toString());
       else window.history.replaceState({}, '', u.toString());
     }
@@ -965,6 +1120,9 @@
     function prUrl(n) { return `https://github.com/${encodeURI(REPO || 'vllm-project/vllm')}/pull/${n}`; }
     function ghLink(n, cls) {
       return `<a href="${prUrl(n)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Open #${n} on GitHub" class="${cls || 'text-slate-500 hover:text-white'}"><i class="ph ph-arrow-square-out"></i></a>`;
+    }
+    function ghUserLink(handle, cls) {
+      return `<a href="https://github.com/${encodeURIComponent(handle)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Open @${esc(handle)} on GitHub" class="${cls || 'text-slate-500 hover:text-white'}"><i class="ph ph-arrow-square-out text-xs"></i></a>`;
     }
     function prChip(n, color) {
       const c = color || 'cyan';
@@ -1558,11 +1716,191 @@
       }
     }
 
-    // PAGE 4: Reviewer Load (Full Table)
-    function toggleReviewerExpand(name) {
-      if (expandedReviewers.has(name)) expandedReviewers.delete(name);
-      else expandedReviewers.add(name);
-      fetchReviewers();
+    // PAGE 4: Reviewer Load & Action Inbox
+    const BUCKET_METADATA = {
+      ready_decision: {
+        desc: "🟢 Ready for Decision — CI passing/green, author addressed comments, and unblocked. Ball is in your court to review or approve.",
+        empty: "No PRs currently awaiting review with green CI.",
+        color: "emerald",
+      },
+      stack_unblockers: {
+        desc: "⚡ High-Leverage Unblockers — Base PRs that block 1 or more downstream PRs. Stamping these unblocks team velocity.",
+        empty: "No stacked base PRs currently pending your review.",
+        color: "fuchsia",
+      },
+      quick_wins: {
+        desc: "⏱️ Quick Wins — Small diffs (<60 lines or <=3 files) or low change risk with green CI. Fast 5-minute review candidates.",
+        empty: "No quick-win PRs currently in queue.",
+        color: "cyan",
+      },
+      stale_or_author: {
+        desc: "💤 Waiting on Author / Stale CI — Changes requested, failing CI, draft, or inactive for 45+ days. Safe to skip or ping author.",
+        empty: "No author-blocked or stale PRs in your queue.",
+        color: "amber",
+      },
+      all_pending: {
+        desc: "📋 All Pending Requests — All open PRs where your review is requested, ranked by change-risk score.",
+        empty: "No pending review requests.",
+        color: "slate",
+      },
+    };
+
+    async function selectReviewer(handle) {
+      if (!handle) return;
+      selectedReviewer = handle.trim();
+      const card = document.getElementById('reviewerInboxCard');
+      if (card) {
+        card.classList.remove('hidden');
+        card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      syncBrowserUrl(false);
+      await loadReviewerInbox(selectedReviewer);
+      document.querySelectorAll('#reviewerTableBody tr').forEach(tr => {
+        const isCur = tr.dataset.reviewerName && tr.dataset.reviewerName.toLowerCase() === selectedReviewer.toLowerCase();
+        tr.className = `hover:bg-dark-850/60 transition cursor-pointer ${isCur ? 'bg-violet-500/10 ring-1 ring-violet-500/40' : ''}`;
+      });
+    }
+
+    function clearSelectedReviewer() {
+      selectedReviewer = '';
+      lastInboxData = null;
+      const card = document.getElementById('reviewerInboxCard');
+      if (card) card.classList.add('hidden');
+      syncBrowserUrl(false);
+      document.querySelectorAll('#reviewerTableBody tr').forEach(tr => {
+        tr.className = "hover:bg-dark-850/60 transition cursor-pointer";
+      });
+    }
+
+    async function loadReviewerInbox(handle) {
+      const card = document.getElementById('reviewerInboxCard');
+      if (!card) return;
+      card.classList.remove('hidden');
+      document.getElementById('inboxReviewerName').textContent = `@${handle}`;
+      document.getElementById('inboxGhLink').href = `https://github.com/${encodeURIComponent(handle)}`;
+      document.getElementById('inboxPrTableBody').innerHTML = `<tr><td colspan="6" class="py-8 text-center text-slate-500 italic font-sans">Analyzing review queues, stacks &amp; diffs for @${esc(handle)}...</td></tr>`;
+
+      try {
+        const res = await apiFetch(`/reviewers/${encodeURIComponent(handle)}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        lastInboxData = data;
+
+        const s = data.summary || {};
+        document.getElementById('inboxStatChips').innerHTML = `
+          <span class="px-2 py-0.5 rounded bg-dark-950 border border-slate-800 text-slate-300"><strong class="text-amber-300">${s.pending_requests ?? 0}</strong> pending requests</span>
+          <span class="px-2 py-0.5 rounded bg-dark-950 border border-slate-800 text-slate-300"><strong class="text-slate-200">${(s.oldest_pending_days ?? 0).toFixed(0)}d</strong> oldest wait</span>
+          <span class="px-2 py-0.5 rounded bg-dark-950 border border-slate-800 text-slate-300"><strong class="text-emerald-400">${s.approvals ?? 0}</strong> approved · <strong class="text-rose-400">${s.changes_requested ?? 0}</strong> changes req</span>
+        `;
+
+        const counts = data.counts || {};
+        document.getElementById('badge_ready_decision').textContent = counts.ready_decision ?? 0;
+        document.getElementById('badge_stack_unblockers').textContent = counts.stack_unblockers ?? 0;
+        document.getElementById('badge_quick_wins').textContent = counts.quick_wins ?? 0;
+        document.getElementById('badge_stale_or_author').textContent = counts.stale_or_author ?? 0;
+        document.getElementById('badge_all_pending').textContent = counts.all_pending ?? 0;
+
+        switchInboxBucket(activeInboxBucket || 'ready_decision');
+      } catch (e) {
+        console.error('Failed to load reviewer inbox:', e);
+        document.getElementById('inboxPrTableBody').innerHTML = `<tr><td colspan="6" class="py-6 text-center text-rose-400 font-sans">Failed to load inbox for @${esc(handle)}</td></tr>`;
+      }
+    }
+
+    function switchInboxBucket(bucketKey) {
+      activeInboxBucket = bucketKey;
+      const tabMeta = BUCKET_METADATA[bucketKey] || BUCKET_METADATA.ready_decision;
+      const colorStyles = {
+        emerald: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
+        fuchsia: "bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/40",
+        cyan: "bg-cyan-500/20 text-cyan-300 border-cyan-500/40",
+        amber: "bg-amber-500/20 text-amber-300 border-amber-500/40",
+        slate: "bg-slate-700/50 text-white border-slate-600",
+      };
+
+      document.querySelectorAll('.inbox-tab').forEach(btn => {
+        btn.className = "inbox-tab px-3 py-2 rounded-lg text-xs font-semibold bg-dark-850 text-slate-400 hover:text-white border border-slate-800 transition flex items-center gap-2";
+      });
+
+      const activeBtn = document.getElementById(`tab_${bucketKey}`);
+      if (activeBtn) {
+        activeBtn.className = `inbox-tab px-3 py-2 rounded-lg text-xs font-semibold ${colorStyles[tabMeta.color] || colorStyles.emerald} border transition flex items-center gap-2`;
+      }
+
+      renderInboxBucket(bucketKey);
+    }
+
+    function renderInboxBucket(bucketKey) {
+      if (!lastInboxData) return;
+      const meta = BUCKET_METADATA[bucketKey] || BUCKET_METADATA.ready_decision;
+      const prs = (lastInboxData.buckets && lastInboxData.buckets[bucketKey]) || [];
+
+      document.getElementById('inboxBucketDescText').textContent = meta.desc;
+      document.getElementById('inboxBucketCountTag').textContent = `Showing ${prs.length} PRs`;
+
+      const tbody = document.getElementById('inboxPrTableBody');
+      if (!prs.length) {
+        tbody.innerHTML = `<tr><td colspan="6" class="py-8 text-center text-slate-500 italic font-sans">${meta.empty}</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = prs.map(pr => {
+        const ciBadge = pr.ci_status === 'SUCCESS' ? '<span class="text-emerald-400 font-bold font-mono">✓ CI Pass</span>' :
+                        (pr.ci_status === 'FAILURE' ? '<span class="text-rose-400 font-bold font-mono">✗ CI Fail</span>' : '<span class="text-amber-400 font-bold font-mono">⋯ CI</span>');
+
+        const lines = pr.lines_changed != null ? `${pr.lines_changed} lines` : `${pr.files_changed_count || 0} files`;
+        const files = `${pr.files_changed_count || 0} files`;
+        const blocksCount = (pr.blocks || []).length;
+        const stackBadge = blocksCount > 0
+          ? `<span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-fuchsia-500/15 text-fuchsia-300 border border-fuchsia-500/30">⚡ Blocks ${blocksCount} PR${blocksCount > 1 ? 's' : ''}</span>`
+          : (pr.blocked_by && pr.blocked_by.length ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-amber-500/15 text-amber-300 border border-amber-500/20">Blocked</span>` : '<span class="text-slate-500 text-[10px]">Standalone</span>');
+
+        const idleStr = pr.staleness_days >= 14
+          ? `<span class="text-rose-300 font-mono text-[10px]">${pr.staleness_days.toFixed(0)}d idle</span>`
+          : `<span class="text-emerald-400 font-mono text-[10px]">⚡ ${pr.staleness_days.toFixed(0)}d active</span>`;
+
+        const filesUrl = pr.url ? `${pr.url}/files` : `https://github.com/vllm-project/vllm/pull/${pr.number}/files`;
+
+        return `
+          <tr class="hover:bg-dark-850/60 transition cursor-pointer" onclick="openDrawer(${pr.number})">
+            <td class="py-3 px-3 whitespace-nowrap">
+              <div class="flex items-center gap-1.5 font-mono">
+                <span class="font-bold text-cyan-400 hover:underline">#${pr.number}</span>
+                ${ghLink(pr.number)}
+              </div>
+            </td>
+            <td class="py-3 px-3 max-w-md">
+              <p class="font-semibold text-slate-100 hover:text-emerald-300 transition line-clamp-1">${esc(pr.title)}</p>
+              <p class="text-[11px] text-slate-400 mt-0.5 truncate">${esc(pr.reason || pr.status)}</p>
+            </td>
+            <td class="py-3 px-3 whitespace-nowrap text-slate-300">
+              <div class="text-xs">by <strong class="text-white">${esc(pr.author)}</strong></div>
+              <div class="mt-0.5">${idleStr}</div>
+            </td>
+            <td class="py-3 px-3 whitespace-nowrap">
+              <div>${ciBadge}</div>
+              <div class="mt-1">${riskBadge(pr)}</div>
+            </td>
+            <td class="py-3 px-3 whitespace-nowrap text-slate-300">
+              <div class="font-mono text-[11px]">${files} · ${lines}</div>
+              <div class="mt-1">${stackBadge}</div>
+            </td>
+            <td class="py-3 px-3 text-right whitespace-nowrap" onclick="event.stopPropagation()">
+              <div class="flex items-center justify-end gap-1.5">
+                <a href="${esc(filesUrl)}" target="_blank" rel="noopener" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 text-[11px] font-semibold transition inline-flex items-center gap-1" title="Open Files Changed diff on GitHub">
+                  <i class="ph ph-files"></i> Diff
+                </a>
+                <button onclick="navClick(event, 'simulator'); runSimulation(${pr.number});" class="px-2 py-1 rounded bg-fuchsia-600/20 hover:bg-fuchsia-600/30 text-fuchsia-300 hover:text-white border border-fuchsia-500/40 text-[11px] font-semibold transition inline-flex items-center gap-1" title="Simulate Merge Impact">
+                  <i class="ph ph-lightning"></i> Sim
+                </button>
+                <button onclick="openDrawer(${pr.number})" class="px-2 py-1 rounded bg-dark-850 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 text-[11px] font-semibold transition" title="Open PR Dossier Drawer">
+                  Drawer
+                </button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
     }
 
     async function fetchReviewers() {
@@ -1575,35 +1913,41 @@
           document.getElementById('reviewerWaitingSummary').textContent =
             `Waiting on: reviewer ${w.REVIEWER || 0} · author ${w.AUTHOR || 0} · merge ${w.MERGE || 0} · median reviewer wait ${lastOverview.median_reviewer_wait_days ?? 0}d`;
         }
+
+        const queryHandle = selectedReviewer || (searchQuery && rows.some(r => r.reviewer.toLowerCase() === searchQuery.toLowerCase()) ? searchQuery : '');
+        console.log('[DEBUG reviewers] selectedReviewer:', selectedReviewer, 'searchQuery:', searchQuery, 'queryHandle:', queryHandle, 'rowsCount:', rows.length);
+        if (queryHandle) {
+          await selectReviewer(queryHandle);
+        }
+
         const tbody = document.getElementById('reviewerTableBody');
         if (!rows.length) {
-          tbody.innerHTML = '<tr><td colspan="7" class="py-6 text-center text-slate-500 italic">No review data matches. Sync GitHub to load review requests.</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="7" class="py-6 text-center text-slate-500 italic font-sans">No review data matches. Sync GitHub to load review requests.</td></tr>';
           return;
         }
+
         tbody.innerHTML = rows.map(r => {
-          const isExp = expandedReviewers.has(r.reviewer);
-          const shown = isExp ? r.pending_pr_numbers : r.pending_pr_numbers.slice(0, 8);
-          const extra = r.pending_pr_numbers.length - shown.length;
+          const isSelected = selectedReviewer && selectedReviewer.toLowerCase() === r.reviewer.toLowerCase();
           return `
-            <tr class="hover:bg-dark-850/50 transition">
-              <td class="py-2.5 px-3 font-mono font-bold text-violet-300 whitespace-nowrap">${esc(r.reviewer)}</td>
+            <tr data-reviewer-name="${esc(r.reviewer)}" class="hover:bg-dark-850/60 transition cursor-pointer ${isSelected ? 'bg-violet-500/10 ring-1 ring-violet-500/40' : ''}" onclick="selectReviewer('${esc(r.reviewer)}')">
+              <td class="py-2.5 px-3 font-mono font-bold text-violet-300 whitespace-nowrap">
+                <div class="flex items-center gap-1.5">
+                  <span class="hover:underline">${esc(r.reviewer)}</span>
+                  ${ghUserLink(r.reviewer)}
+                </div>
+              </td>
               <td class="py-2.5 px-3 text-right font-mono font-bold ${r.pending_requests > 0 ? 'text-amber-300' : 'text-slate-500'}">${r.pending_requests}</td>
               <td class="py-2.5 px-3 text-right font-mono text-slate-300">${r.oldest_pending_days > 0 ? `${r.oldest_pending_days.toFixed(0)}d` : '—'}</td>
               <td class="py-2.5 px-3 text-right font-mono text-slate-300">${r.reviews_submitted}</td>
               <td class="py-2.5 px-3 text-right font-mono text-emerald-400">${r.approvals}</td>
               <td class="py-2.5 px-3 text-right font-mono text-rose-400">${r.changes_requested}</td>
-              <td class="py-2.5 px-3">
-                <div class="flex flex-wrap gap-1">
-                  ${shown.map(n => `<span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 inline-flex items-center gap-1"><span onclick="openDrawer(${n})" class="cursor-pointer hover:text-violet-300">#${n}</span>${ghLink(n)}</span>`).join('')}
-                  ${extra > 0 ? `<button data-reviewer-toggle="${esc(r.reviewer)}" class="text-[10px] font-mono px-2 py-0.5 rounded bg-violet-500/15 text-violet-300">+${extra} more</button>` : ''}
-                  ${isExp && r.pending_pr_numbers.length > 8 ? `<button data-reviewer-toggle="${esc(r.reviewer)}" class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-400">Show less</button>` : ''}
-                </div>
+              <td class="py-2.5 px-3 text-right whitespace-nowrap" onclick="event.stopPropagation()">
+                <button onclick="selectReviewer('${esc(r.reviewer)}')" class="px-2.5 py-1 rounded bg-violet-600/20 hover:bg-violet-600/35 text-violet-300 hover:text-white border border-violet-500/40 text-[11px] font-semibold transition inline-flex items-center gap-1">
+                  <span>Open Inbox</span> <i class="ph-bold ph-arrow-right text-[10px]"></i>
+                </button>
               </td>
             </tr>`;
         }).join('');
-        tbody.querySelectorAll('[data-reviewer-toggle]').forEach(btn => {
-          btn.addEventListener('click', () => toggleReviewerExpand(btn.dataset.reviewer || ''));
-        });
       } catch (e) {
         console.error('Error fetching reviewers:', e);
       }
@@ -1855,6 +2199,7 @@
       activeCollisionFile = params.get('file') || '';
       currentFilter = params.get('subsystem') || 'ALL';
       searchQuery = (params.get('q') || '').toLowerCase();
+      selectedReviewer = params.get('reviewer') || (activePage === 'reviewers' ? params.get('q') : '') || '';
       document.getElementById('searchInput').value = params.get('q') || '';
       document.getElementById('clearSearchBtn').classList.toggle('hidden', !searchQuery);
       renderPageChrome();
