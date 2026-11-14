@@ -49,11 +49,14 @@ jobs:
           git -C "$tmpdir" push --force "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:refs/heads/static-site
 
       - name: Upload bundle to Hugging Face Static Space
+        continue-on-error: true
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          if [ -z "${HF_TOKEN:-}" ]; then
+          CLEAN_TOKEN=$(echo "${HF_TOKEN:-}" | tr -d '"'"'"' | xargs)
+          if [ -z "$CLEAN_TOKEN" ]; then
             echo "HF_TOKEN secret is not set; skipping Hugging Face upload."
             exit 0
           fi
-          python3 -c "from huggingface_hub import HfApi; HfApi().upload_folder(folder_path='dist_hf', repo_id='Aravind0495/vllm-pr-radar', repo_type='space', commit_message='Refresh vLLM PR Radar snapshot')"
+          export CLEAN_TOKEN
+          python3 -c "import os; from huggingface_hub import HfApi; token = os.environ.get('CLEAN_TOKEN'); HfApi(token=token).upload_folder(folder_path='dist_hf', repo_id='Aravind0495/vllm-pr-radar', repo_type='space', token=token, commit_message='Refresh vLLM PR Radar snapshot')"
