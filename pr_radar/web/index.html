@@ -1551,12 +1551,12 @@
       }
       const headlineEl = document.getElementById('overviewInsightHeadline');
       if (headlineEl) {
-        headlineEl.innerHTML = `Of <strong class="text-white font-mono">${(d.total_open_prs || 0).toLocaleString()}</strong> open PRs, <strong class="text-emerald-300 font-mono">${notOnReviewerPct}% (${notOnReviewer.toLocaleString()})</strong> aren't waiting on a human reviewer — <strong class="text-rose-300 font-mono">${ciPct}%</strong> fail CI, <strong class="text-slate-300 font-mono">${draftPct}%</strong> are drafts, and <strong class="text-orange-300 font-mono">${conflictPct}%</strong> have merge conflicts. Only <strong class="text-cyan-300 font-mono">${onReviewer.toLocaleString()} (${revPct}%)</strong> are healthy &amp; awaiting review, and <strong class="text-emerald-400 font-mono">${readyMerge.toLocaleString()}</strong> are approved &amp; merge-ready.`;
+        headlineEl.innerHTML = `Of <strong class="text-white font-mono">${(d.total_open_prs || 0).toLocaleString()}</strong> open PRs, <strong class="text-emerald-300 font-mono">${notOnReviewerPct}% (${notOnReviewer.toLocaleString()})</strong> aren't waiting on a human reviewer — <strong class="text-rose-300 font-mono">${ciPct}%</strong> fail CI, <strong class="text-slate-300 font-mono">${draftPct}%</strong> are drafts, and <strong class="text-orange-300 font-mono">${conflictPct}%</strong> have merge conflicts. Only <strong class="text-cyan-300 font-mono">${onReviewer.toLocaleString()} (${revPct}%)</strong> are awaiting review (<strong class="text-cyan-200 font-mono">${wd.reviewer_active}</strong> active + <strong class="text-sky-300 font-mono">${wd.reviewer_stale}</strong> stalled ≥14d), and <strong class="text-emerald-400 font-mono">${readyMerge.toLocaleString()}</strong> are approved &amp; merge-ready.`;
       }
       const subEl = document.getElementById('overviewInsightSub');
       if (subEl) {
         subEl.innerHTML = `
-          <span class="px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">On Reviewer: ${onReviewer.toLocaleString()} (${wd.reviewer_active} active + ${wd.reviewer_stale} stale PRs ≥14d)</span>
+          <span class="px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">On Reviewer: ${onReviewer.toLocaleString()} (${wd.reviewer_active} active + ${wd.reviewer_stale} stalled PRs ≥14d)</span>
           <span class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20" title="Approved + CI green/pending + non-conflicting + stack-unblocked + non-draft (includes mergeable: UNKNOWN)">Ready to Merge: ${readyMerge.toLocaleString()}</span>
           <span class="px-2 py-0.5 rounded bg-rose-500/10 text-rose-300 border border-rose-500/20">Live Merge Races (&lt;5d): ${(d.live_race_collisions_count || 0).toLocaleString()}</span>
         `;
@@ -1696,7 +1696,7 @@
       const statusEntries = [
         ['READY_TO_MERGE', 'Ready to Merge', 'bg-emerald-400', 'Approved + CI green/pending + non-conflicting + stack-unblocked + non-draft (includes mergeable: UNKNOWN)'],
         ['WAITING_REVIEW', 'Waiting on Review (<14d)', 'bg-cyan-400', 'Healthy CI, non-conflicting, unblocked PRs updated within 14d awaiting review'],
-        ['STALE', 'Stale PR (≥14d idle, healthy CI)', 'bg-sky-600', 'Healthy CI, non-conflicting PRs with no activity for ≥14 days'],
+        ['STALE', 'Stale PR (≥14d stalled, unblocked)', 'bg-sky-600', 'Unblocked PRs with green/pending CI and no activity for ≥14 days'],
         ['BLOCKED_BY_DEP', 'Blocked by Stack', 'bg-fuchsia-400', 'Depends on an open upstream PR in a stack'],
         ['CHANGES_REQUESTED', 'Waiting on Author (Feedback)', 'bg-amber-400', 'Reviewer requested changes or commented after author’s last push'],
         ['CI_FAILURE', 'CI Failure (Author)', 'bg-rose-400', 'Latest commit status check rollup is FAILURE'],
@@ -1763,7 +1763,8 @@
       const covEl = document.getElementById('overviewReviewerCoverage');
       const cov = d.reviewer_coverage;
       if (covEl && cov) {
-        covEl.innerHTML = `Reconciles to <strong class="text-cyan-300">${(cov.on_reviewer_total || 0).toLocaleString()} On Reviewer</strong>: <strong class="text-slate-200">${(cov.with_individual_reviewer || 0).toLocaleString()}</strong> individual-assigned · <strong class="text-violet-300">${(cov.team_only_reviewer || 0).toLocaleString()}</strong> @team-only · <strong class="text-slate-300">${(cov.unassigned_reviewer || 0).toLocaleString()}</strong> unassigned <span class="text-slate-500">(multi-reviewer PRs count in each queue)</span>`;
+        covEl.title = 'No active reviewer request = neither an individual user nor a @team is currently in GitHub reviewRequests (e.g. a prior review cleared the request before the author pushed a follow-up, or no CODEOWNERS rule matched).';
+        covEl.innerHTML = `Reconciles to <strong class="text-cyan-300">${(cov.on_reviewer_total || 0).toLocaleString()} On Reviewer</strong>: <strong class="text-slate-200">${(cov.with_individual_reviewer || 0).toLocaleString()}</strong> individual-requested · <strong class="text-violet-300">${(cov.team_only_reviewer || 0).toLocaleString()}</strong> @team-only · <strong class="text-slate-300">${(cov.unassigned_reviewer || 0).toLocaleString()}</strong> no active reviewer request <span class="text-slate-500">(neither user nor team; multi-reviewer PRs count in each queue)</span>`;
       }
       document.getElementById('overviewReviewers').innerHTML = (d.top_reviewer_load || []).map(r => {
         const act = r.actionable_pending ?? 0;
@@ -1776,11 +1777,11 @@
             <div>
               <div class="flex items-center gap-2">
                 <span class="font-mono text-xs font-bold text-violet-300 hover:underline">${esc(r.reviewer)}</span>
-                ${actStale > 0 ? `<span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30" title="Actionable review requests waiting >30 days">${actStale} overdue req (&gt;30d)</span>` : ''}
+                ${actStale > 0 ? `<span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30" title="Actionable review requests waiting >30 days (counted inside actionable)">${actStale} overdue req (&gt;30d)</span>` : ''}
               </div>
               <div class="text-[10px] text-slate-500 font-mono mt-0.5">${raw.toLocaleString()} raw pending · ${rawStale.toLocaleString()} stale req (&gt;30d) · oldest ${oldest}d</div>
             </div>
-            <span class="text-xs font-mono font-bold px-2.5 py-1 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">${act.toLocaleString()} actionable</span>
+            <span class="text-xs font-mono font-bold px-2.5 py-1 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30" title="Non-draft, unblocked, CI green/pending PRs waiting on this reviewer — includes overdue >30d requests">${act.toLocaleString()} actionable</span>
           </div>`;
       }).join('') || '<span class="text-xs text-slate-500 italic">No reviewer data yet.</span>';
 
