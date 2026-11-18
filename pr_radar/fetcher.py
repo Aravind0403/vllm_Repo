@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import json
 import subprocess
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 import requests
@@ -428,6 +428,124 @@ class GitHubFetcher:
 
         return results
 
+    # --------------------------------------------------------------- pulse & history
+    def pulse_cache_path(self, repo_slug: str) -> Path:
+        owner, repo = repo_slug.split("/", 1)
+        return self.cache_dir / f"{owner}_{repo}_pulse.json"
+
+    def history_cache_path(self, repo_slug: str) -> Path:
+        owner, repo = repo_slug.split("/", 1)
+        return self.cache_dir / f"{owner}_{repo}_history.json"
+
+    def fetch_repo_pulse(
+        self,
+        repo_slug: str,
+        use_cache: bool = True,
+        max_age_minutes: Optional[float] = 60.0,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Fetch 7d/30d opened & merged counts plus 13 weekly buckets (~90d trend)
+        in a single lightweight GitHub GraphQL search query (~2 API points).
+        """
+        now = datetime.now(timezone.utc)
+        path = self.pulse_cache_path(repo_slug)
+        cached: Optional[Dict[str, Any]] = None
+        if use_cache and path.exists():
+            try:
+                cached = json.loads(path.read_text(encoding="utf-8"))
+                fetched_at = _parse_ts(cached.get("fetched_at"))
+                if fetched_at is not None:
+                    age_min = (now - fetched_at).total_seconds() / 60.0
+                    if max_age_minutes is None or age_min <= max_age_minutes or self.offline:
+                        return cached
+            except Exception:
+                cached = None
+
+        if self.offline or not self.token:
+            return cached
+
+        d7 = (now - timedelta(days=7)).strftime("%Y-%m-%d")
+        d30 = (now - timedelta(days=30)).strftime("%Y-%m-%d")
+        aliases = [
+            f'o7: search(query: "repo:{repo_slug} is:pr created:>={d7}", type: ISSUE, first: 1) {{ issueCount }}',
+            f'm7: search(query: "repo:{repo_slug} is:pr is:merged merged:>={d7}", type: ISSUE, first: 1) {{ issueCount }}',
+            f'o30: search(query: "repo:{repo_slug} is:pr created:>={d30}", type: ISSUE, first: 1) {{ issueCount }}',
+            f'm30: search(query: "repo:{repo_slug} is:pr is:merged merged:>={d30}", type: ISSUE, first: 1) {{ issueCount }}',
+        ]
+        week_ranges: List[Tuple[int, str, str]] = []
+        for w in range(13):
+            end_dt = now - timedelta(days=w * 7)
+            start_dt = now - timedelta(days=(w + 1) * 7 - 1)
+            s_str = start_dt.strftime("%Y-%m-%d")
+            e_str = end_dt.strftime("%Y-%m-%d")
+            week_ranges.append((w, s_str, e_str))
+            aliases.append(f'wo_{w}: search(query: "repo:{repo_slug} is:pr created:{s_str}..{e_str}", type: ISSUE, first: 1) {{ issueCount }}')
+            aliases.append(f'wm_{w}: search(query: "repo:{repo_slug} is:pr is:merged merged:{s_str}..{e_str}", type: ISSUE, first: 1) {{ issueCount }}')
+
+        query_str = "query {\n" + "\n".join(aliases) + "\n}"
+        try:
+            resp = requests.post(
+                "https://api.github.com/graphql",
+                json={"query": query_str},
+                headers=self._headers(),
+                timeout=25,
+            )
+            if resp.status_code != 200:
+                return cached
+            data = (resp.json().get("data") or {})
+            if not data:
+                return cached
+            weekly = []
+            for w, s_str, e_str in reversed(week_ranges):
+                weekly.append({
+                    "week_start": s_str,
+                    "week_end": e_str,
+                    "opened": int((data.get(f"wo_{w}") or {}).get("issueCount") or 0),
+                    "merged": int((data.get(f"wm_{w}") or {}).get("issueCount") or 0),
+                })
+            pulse = {
+                "repo": repo_slug,
+                "fetched_at": now.isoformat(),
+                "opened_7d": int((data.get("o7") or {}).get("issueCount") or 0),
+                "merged_7d": int((data.get("m7") or {}).get("issueCount") or 0),
+                "opened_30d": int((data.get("o30") or {}).get("issueCount") or 0),
+                "merged_30d": int((data.get("m30") or {}).get("issueCount") or 0),
+                "weekly_90d": weekly,
+            }
+            try:
+                path.write_text(json.dumps(pulse, indent=2), encoding="utf-8")
+            except Exception:
+                pass
+            return pulse
+        except Exception as e:
+            print(f"Warning: Failed to fetch repo pulse: {e}")
+            return cached
+
+    def record_daily_snapshot(self, repo_slug: str, snapshot: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Append or update today's snapshot row (keeps last 90 days)."""
+        path = self.history_cache_path(repo_slug)
+        rows: List[Dict[str, Any]] = []
+        if path.exists():
+            try:
+                loaded = json.loads(path.read_text(encoding="utf-8"))
+                if isinstance(loaded, list):
+                    rows = loaded
+            except Exception:
+                rows = []
+
+        day = snapshot.get("date")
+        if day:
+            rows = [r for r in rows if r.get("date") != day]
+            rows.append(snapshot)
+            rows.sort(key=lambda r: r.get("date", ""))
+            rows = rows[-90:]
+            if not self.offline:
+                try:
+                    path.write_text(json.dumps(rows, indent=2), encoding="utf-8")
+                except Exception:
+                    pass
+        return rows
+
     # --------------------------------------------------------------- convert
     def _convert_node_to_pr(self, repo_slug: str, node: Dict[str, Any]) -> PullRequest:
         commits = (node.get("commits") or {}).get("nodes") or []
@@ -458,11 +576,13 @@ class GitHubFetcher:
         author_login = author.get("login") if author else "ghost"
 
         requested: List[str] = []
+        requested_teams: List[str] = []
         for rr in (node.get("reviewRequests") or {}).get("nodes") or []:
             who = (rr or {}).get("requestedReviewer") or {}
-            name = who.get("login") or who.get("name")
-            if name:
-                requested.append(name)
+            if who.get("login"):
+                requested.append(who["login"])
+            elif who.get("name"):
+                requested_teams.append(who["name"])
 
         reviews: List[ReviewEvent] = []
         for rv in (node.get("reviews") or {}).get("nodes") or []:
@@ -503,6 +623,7 @@ class GitHubFetcher:
             files=files,
             labels=labels,
             requested_reviewers=requested,
+            requested_teams=requested_teams,
             reviews=reviews,
             last_commit_at=last_commit_at,
             last_comment_at=last_comment_at,

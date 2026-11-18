@@ -69,6 +69,35 @@ def _level(score: int) -> str:
     return "LOW"
 
 
+def get_risk_formula_spec(repo_slug: str) -> Dict[str, object]:
+    """Published, auditable specification of the risk score formula and path weights."""
+    return {
+        "equation": "score = round(100 × (0.50 × sensitivity + 0.20 × churn + 0.30 × collision))",
+        "weights": {
+            "sensitivity": WEIGHT_SENSITIVITY,
+            "churn": WEIGHT_CHURN,
+            "collision": WEIGHT_COLLISION,
+        },
+        "thresholds": {
+            "CRITICAL": 80,
+            "HIGH": 60,
+            "MEDIUM": 30,
+            "LOW": 0,
+        },
+        "churn_saturation_lines": CHURN_SATURATION_LINES,
+        "collision_weights": {
+            "live_critical": 0.4,
+            "live_high": 0.2,
+            "live_window_days": 5,
+        },
+        "multi_file_boost": "max_weight × (1 + 0.05 × (sensitive_files - 1)), capped at 1.0",
+        "path_rules": [
+            {"pattern": rx, "weight": w, "label": label}
+            for rx, w, label in path_table_for(repo_slug)
+        ],
+    }
+
+
 def score_pr(
     pr: PullRequest,
     collisions: Optional[List[FileCollision]] = None,
@@ -80,7 +109,7 @@ def score_pr(
     sensitivity: max weight of any matched sensitive path, boosted by how many
                  sensitive files are touched (capped at 1.0)
     churn:       total changed lines / CHURN_SATURATION_LINES (capped at 1.0)
-    collision:   0.5 per CRITICAL + 0.25 per HIGH collision (capped at 1.0)
+    collision:   0.4 per CRITICAL + 0.2 per HIGH live collision (capped at 1.0)
     score:       100 * (0.5 * sensitivity + 0.2 * churn + 0.3 * collision)
     """
     table = [(re.compile(rx), w, label) for rx, w, label in path_table_for(repo_slug or pr.repo)]

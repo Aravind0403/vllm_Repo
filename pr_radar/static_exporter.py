@@ -32,10 +32,10 @@ def _space_readme(repo_slug: str, pr_count: int, stacks_count: int) -> str:
         "sdk: static\n"
         "pinned: false\n"
         "app_file: index.html\n"
-        "short_description: Live PR dependency DAG, collision radar & triage for vLLM\n"
+        "short_description: Hourly-synced PR dependency DAG, collision radar & triage for vLLM\n"
         "---\n\n"
         f"# PR Radar — `{repo_slug}`\n\n"
-        f"Static snapshot built from **{pr_count:,} open PRs** and **{stacks_count:,} dependency stacks**.\n\n"
+        f"Hourly-synced snapshot built from **{pr_count:,} open PRs** and **{stacks_count:,} dependency stacks**.\n\n"
         "- `/overview` — Risk summary, triage breakdown, reviewer queues\n"
         "- `/dag` — Dependency stacks and merge order\n"
         "- `/collisions` — Contended hotspot files and live merge races\n"
@@ -92,17 +92,25 @@ def export_static_site(eng: PRRadarEngine, out_dir: str | Path) -> Dict[str, Any
         "repo": eng.repo_slug,
         "total_open_prs": stats["total_open_prs_analyzed"],
         "last_synced_at": stats["last_synced_at"],
-        "sync_mode": "static-snapshot",
+        "sync_mode": "hourly-snapshot",
         "status_breakdown": stats["status_breakdown"],
         "foundational_unblockers": stats["foundational_unblockers"],
+        "top_stack_unblockers": stats["top_stack_unblockers"],
         "dependency_stacks_count": stats["dependency_stacks_count"],
         "critical_file_collisions": stats["critical_file_collisions"],
+        "live_race_collisions_count": stats["live_race_collisions_count"],
+        "top_live_collisions": stats["top_live_collisions"],
         "top_hotspot_files": stats["top_hotspot_files"],
         "risk_breakdown": stats["risk_breakdown"],
+        "risk_breakdown_actionable": stats["risk_breakdown_actionable"],
+        "risk_formula": stats["risk_formula"],
         "top_risk_prs": stats["top_risk_prs"],
         "waiting_on_breakdown": stats["waiting_on_breakdown"],
+        "waiting_on_detail": stats["waiting_on_detail"],
+        "reviewer_coverage": stats["reviewer_coverage"],
         "median_reviewer_wait_days": stats["median_reviewer_wait_days"],
         "top_reviewer_load": stats["top_reviewer_load"],
+        "repo_pulse": stats["repo_pulse"],
     }
 
     health = {
@@ -110,12 +118,12 @@ def export_static_site(eng: PRRadarEngine, out_dir: str | Path) -> Dict[str, Any
         "repo": eng.repo_slug,
         "prs_indexed": len(eng.prs),
         "last_synced_at": eng.last_synced_at.isoformat() if eng.last_synced_at else None,
-        "sync_mode": "static-snapshot",
-        "sync_note": "Static snapshot",
+        "sync_mode": "hourly-snapshot",
+        "sync_note": "Updated hourly via GitHub GraphQL",
         "offline": True,
         "refreshing": False,
-        "sync_ttl_minutes": 30.0,
-        "version": "1.1.0",
+        "sync_ttl_minutes": 60.0,
+        "version": "1.2.0",
     }
 
     subsystems = []

@@ -26,9 +26,31 @@ def test_overview_endpoint():
     assert response.status_code == 200
     data = response.json()
     for key in ("total_open_prs", "dependency_stacks_count", "critical_file_collisions",
-                "risk_breakdown", "top_risk_prs", "waiting_on_breakdown", "top_reviewer_load"):
+                "risk_breakdown", "risk_breakdown_actionable", "risk_formula", "top_risk_prs",
+                "waiting_on_breakdown", "waiting_on_detail", "top_reviewer_load",
+                "top_live_collisions", "top_stack_unblockers"):
         assert key in data
-    assert sum(data["risk_breakdown"].values()) == data["total_open_prs"]
+    total = data["total_open_prs"]
+    assert sum(data["risk_breakdown"].values()) == total
+    assert sum(data["status_breakdown"].values()) == total
+    assert sum(data["waiting_on_breakdown"].values()) == total
+    assert sum(data["waiting_on_detail"].values()) == total
+    # Exact reconciliation invariants
+    sb = data["status_breakdown"]
+    wb = data["waiting_on_breakdown"]
+    wd = data["waiting_on_detail"]
+    assert sb.get("READY_TO_MERGE", 0) == wb.get("MERGE", 0) == wd["merge_ready"]
+    assert wd["reviewer_active"] + wd["reviewer_stale"] == wb.get("REVIEWER", 0)
+    assert wd["author_ci_or_conflict"] + wd["author_feedback"] == wb.get("AUTHOR", 0)
+    assert wd["draft"] + wd["stack_blocked"] == wb.get("NONE", 0)
+    # Risk formula spec is published
+    assert data["risk_formula"]["thresholds"]["CRITICAL"] == 80
+    assert len(data["risk_formula"]["path_rules"]) > 0
+    # Reviewer stale invariant: actionable_stale_30d <= stale_pending_30d
+    for rl in data["top_reviewer_load"]:
+        assert rl["actionable_pending"] <= rl["pending_requests"]
+        assert rl["actionable_stale_30d"] <= rl["stale_pending_30d"]
+        assert rl["is_team"] is False
 
 
 def test_subsystems_endpoint():
@@ -167,6 +189,8 @@ def test_reviewer_inbox_drilldown():
         assert bucket in data["buckets"]
         assert isinstance(data["buckets"][bucket], list)
     assert data["counts"]["all_pending"] == len(data["buckets"]["all_pending"])
+    # Exact reconciliation between ReviewerLoad.actionable_pending and Inbox ready_decision!
+    assert data["counts"]["ready_decision"] == data["summary"]["actionable_pending"]
 
 
 def test_export_static_site_bundle(tmp_path):
@@ -188,3 +212,50 @@ def test_export_static_site_bundle(tmp_path):
     assert "/index.html" in vercel_cfg
     for name in ("overview.json", "health.json", "subsystems.json", "dag.json", "hotspots.json", "collisions.json", "reviewers.json", "dossiers.json"):
         assert (tmp_path / "static-data" / name).exists()
+
+
+def test_page_level_reconciliation_invariants():
+    """
+    Page-level denominator & label contract:
+    Every chart on /overview must reconcile to the exact header total_open_prs,
+    every status key emitted by the API must be rendered in index.html,
+    high-risk header KPI must reconcile to actionable <= all,
+    and reviewer coverage must partition On Reviewer exactly.
+    """
+    health = client.get("/api/v1/health").json()
+    overview = client.get("/api/v1/overview").json()
+    html = client.get("/overview").text
+
+    total_open_prs = overview["total_open_prs"]
+    triage = overview["status_breakdown"]
+    moves = overview["waiting_on_breakdown"]
+    detail = overview["waiting_on_detail"]
+    cov = overview["reviewer_coverage"]
+
+    # 1. Canonical denominator: header == triage sum == moves sum == detail sum
+    assert health["prs_indexed"] == total_open_prs
+    assert sum(triage.values()) == total_open_prs
+    assert sum(moves.values()) == sum(triage.values())
+    assert sum(detail.values()) == total_open_prs
+
+    # 2. Every emitted triage status key is explicitly rendered in index.html statusEntries
+    for status_key in triage.keys():
+        assert f"'{status_key}'" in html, f"Triage status {status_key!r} missing from index.html bars!"
+
+    # 3. High-risk KPI reconciles actionable <= all open
+    rb = overview["risk_breakdown"]
+    rba = overview["risk_breakdown_actionable"]
+    high_all = rb.get("CRITICAL", 0) + rb.get("HIGH", 0)
+    high_act = rba.get("CRITICAL", 0) + rba.get("HIGH", 0)
+    assert 0 <= high_act <= high_all <= total_open_prs
+
+    # 4. Team/individual reviewer coverage partitions On Reviewer exactly
+    assert cov["on_reviewer_total"] == moves.get("REVIEWER", 0)
+    assert (
+        cov["with_individual_reviewer"] + cov["team_only_reviewer"] + cov["unassigned_reviewer"]
+        == moves.get("REVIEWER", 0)
+    )
+
+    # 5. Dual stale definitions are explicitly labeled in the UI
+    assert "Stale PR (≥14d" in html
+    assert "stale req (&gt;30d)" in html or "Stale Req &gt;30d" in html

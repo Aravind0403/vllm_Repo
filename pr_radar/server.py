@@ -24,8 +24,8 @@ _lock = threading.Lock()
 
 app = FastAPI(
     title="PR Radar API",
-    description="Live PR Dependency DAG, Collision Radar, Risk Scoring, and Review-Flow Engine",
-    version="1.1.0",
+    description="PR Dependency DAG, Collision Radar, Auditable Risk Scoring, and Reconciled Review-Flow Engine",
+    version="1.2.0",
 )
 
 app.add_middleware(
@@ -134,14 +134,22 @@ def get_overview(repo: Optional[str] = Query(None)) -> Dict[str, Any]:
         "sync_mode": stats["sync_mode"],
         "status_breakdown": stats["status_breakdown"],
         "foundational_unblockers": stats["foundational_unblockers"],
+        "top_stack_unblockers": stats["top_stack_unblockers"],
         "dependency_stacks_count": stats["dependency_stacks_count"],
         "critical_file_collisions": stats["critical_file_collisions"],
+        "live_race_collisions_count": stats["live_race_collisions_count"],
+        "top_live_collisions": stats["top_live_collisions"],
         "top_hotspot_files": stats["top_hotspot_files"],
         "risk_breakdown": stats["risk_breakdown"],
+        "risk_breakdown_actionable": stats["risk_breakdown_actionable"],
+        "risk_formula": stats["risk_formula"],
         "top_risk_prs": stats["top_risk_prs"],
         "waiting_on_breakdown": stats["waiting_on_breakdown"],
+        "waiting_on_detail": stats["waiting_on_detail"],
+        "reviewer_coverage": stats["reviewer_coverage"],
         "median_reviewer_wait_days": stats["median_reviewer_wait_days"],
         "top_reviewer_load": stats["top_reviewer_load"],
+        "repo_pulse": stats["repo_pulse"],
     }
 
 
@@ -408,44 +416,59 @@ def get_risk(
 def get_reviewers(
     limit: int = 50,
     search: Optional[str] = Query(None),
+    include_teams: bool = Query(True, description="Include @team/... entries"),
     repo: Optional[str] = Query(None),
 ) -> List[Dict[str, Any]]:
-    """Per-reviewer workload: pending requests, reviews submitted, oldest pending wait."""
+    """Per-reviewer workload: actionable now, raw pending requests, overdue >30d, reviews submitted."""
     eng = get_engine(repo)
     rows = eng.reviewer_load
+    if not include_teams:
+        rows = [rl for rl in rows if not rl.is_team]
     if search:
         q = search.lower()
         rows = [rl for rl in rows if q in rl.reviewer.lower()]
     return [rl.model_dump() for rl in rows[:limit]]
 
 
-@app.get("/api/v1/reviewers/{reviewer_handle}")
+@app.get("/api/v1/reviewers/{reviewer_handle:path}")
 def get_reviewer_inbox(
     reviewer_handle: str,
     repo: Optional[str] = Query(None),
 ) -> Dict[str, Any]:
     """
-    Actionable Executive Review Inbox for a specific reviewer:
-    Partitions pending PRs into Decision-Ready, Stack Unblockers, Quick Wins, and Waiting on Author/Stale.
+    Actionable Executive Review Inbox for a specific reviewer (or @team/...):
+    Partitions pending PRs into Decision-Ready (= Actionable Now), Stack Unblockers, Quick Wins, and Waiting on Author/Stale.
     """
     eng = get_engine(repo)
     handle_lower = reviewer_handle.strip().lower()
     r_matches = [r for r in eng.reviewer_load if r.reviewer.lower() == handle_lower]
     summary = r_matches[0].model_dump() if r_matches else {
         "reviewer": reviewer_handle,
+        "is_team": handle_lower.startswith("@team/"),
+        "actionable_pending": 0,
+        "actionable_stale_30d": 0,
         "pending_requests": 0,
+        "stale_pending_30d": 0,
         "reviews_submitted": 0,
         "approvals": 0,
         "changes_requested": 0,
+        "actionable_pr_numbers": [],
         "pending_pr_numbers": [],
+        "oldest_actionable_days": 0.0,
         "oldest_pending_days": 0.0,
     }
 
     pending_nums = set(summary.get("pending_pr_numbers", []))
+    is_team = handle_lower.startswith("@team/")
+    team_name = handle_lower[len("@team/"):] if is_team else ""
     for pr in eng.prs:
         analysis = eng.analyses.get(pr.number)
         flow = analysis.review_flow if analysis else None
-        if flow and any(req.lower() == handle_lower for req in flow.requested_reviewers):
+        if not flow:
+            continue
+        if is_team and any(t.lower() == team_name for t in flow.requested_teams):
+            pending_nums.add(pr.number)
+        elif not is_team and any(req.lower() == handle_lower for req in flow.requested_reviewers):
             pending_nums.add(pr.number)
 
     dossiers = [eng.get_pr_dossier(n) for n in pending_nums if eng.get_pr_dossier(n) is not None]
@@ -461,29 +484,33 @@ def get_reviewer_inbox(
         ci = d.get("ci_status")
         is_draft = d.get("is_draft", False)
         blocks = d.get("blocks") or []
+        blocked_by = d.get("blocked_by") or []
         files = d.get("files_changed_count", 0)
         lines = d.get("lines_changed", 0)
         waiting_on = flow.get("waiting_on")
 
         if len(blocks) > 0:
             stack_unblockers.append(d)
+        # Strictly matches is_pr_actionable_for_reviewer (includes overdue/stale PRs where ball is on reviewer)
         if (
             waiting_on == "REVIEWER"
             and not is_draft
-            and ci in ("SUCCESS", "PENDING", "UNKNOWN")
-            and status not in ("CONFLICTING", "CI_FAILURE", "BLOCKED_BY_DEP", "DRAFT")
+            and not blocked_by
+            and d.get("mergeable") != "CONFLICTING"
+            and ci != "FAILURE"
         ):
             ready_decision.append(d)
         elif (
-            waiting_on == "AUTHOR"
-            or status in ("CHANGES_REQUESTED", "CI_FAILURE", "CONFLICTING", "DRAFT")
+            waiting_on in ("AUTHOR", "NONE")
+            or status in ("CHANGES_REQUESTED", "CI_FAILURE", "CONFLICTING", "DRAFT", "BLOCKED_BY_DEP")
             or is_draft
-            or d.get("staleness_days", 0) >= 45
         ):
             stale_or_author.append(d)
         if (
-            (files <= 3 or (lines is not None and lines <= 60) or d.get("risk_level") == "LOW")
+            waiting_on == "REVIEWER"
+            and (files <= 3 or (lines is not None and lines <= 60) or d.get("risk_level") == "LOW")
             and not is_draft
+            and not blocked_by
             and ci == "SUCCESS"
             and status not in ("CONFLICTING", "CI_FAILURE")
         ):

@@ -157,7 +157,8 @@ def test_full_fetch_paginates_everything_and_parses_review_fields(tmp_path, monk
     assert f.last_sync_info["mode"] == "full"
 
     pr = prs[0]
-    assert pr.requested_reviewers == ["bob", "core-team"]
+    assert pr.requested_reviewers == ["bob"]
+    assert pr.requested_teams == ["core-team"]
     assert pr.reviews[0].author == "carol" and pr.reviews[0].state == "APPROVED"
     assert pr.last_commit_at is not None
     assert pr.last_comment_author == "alice"

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PR Radar — Live PR Dependency, Collision &amp; Triage Engine</title>
+  <title>PR Radar — PR Dependency, Collision &amp; Triage Engine</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -64,7 +64,9 @@
       <div class="hidden md:flex items-center gap-3 mr-1">
         <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-400"></span>Open PRs: <strong id="statTotalPrs" class="text-white">...</strong></span>
         <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-fuchsia-400"></span>Stacks: <strong id="statStacks" class="text-white">...</strong></span>
-        <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-rose-400"></span>High risk: <strong id="statHighRisk" class="text-white">...</strong></span>
+        <span class="flex items-center gap-1.5 cursor-pointer hover:text-slate-200 transition" onclick="openRiskFormulaModal()" title="Click to inspect the published risk scoring formula">
+          <span class="w-2 h-2 rounded-full bg-rose-400"></span>High risk: <strong id="statHighRisk" class="text-white">...</strong>
+        </span>
       </div>
       <div class="hidden lg:flex items-center gap-1.5 text-[11px] text-slate-500 font-mono" title="Last GitHub sync">
         <i class="ph ph-clock text-sm"></i>
@@ -130,59 +132,135 @@
     <!-- PAGE 0: Overview -->
     <section id="pageOverview" class="page-view hidden w-full h-full overflow-y-auto p-6">
       <div class="max-w-7xl mx-auto space-y-6">
+
+        <!-- 1. Post-Fix Triage Insight Banner + Repo Pulse & 90-Day Sparkline -->
+        <div id="overviewInsightBanner" class="bg-gradient-to-r from-dark-900 via-dark-900 to-slate-900/90 border border-emerald-500/30 rounded-xl p-5 shadow-lg">
+          <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+            <div class="space-y-1.5 min-w-0">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono">Reconciled Triage Pulse</span>
+                <span id="overviewFreshnessTag" class="text-[11px] text-slate-400 font-mono">Updated hourly via GitHub GraphQL</span>
+              </div>
+              <p id="overviewInsightHeadline" class="text-sm text-slate-200 leading-relaxed">Loading reconciled triage summary...</p>
+              <div id="overviewInsightSub" class="flex flex-wrap items-center gap-2 text-[11px] text-slate-400 font-mono"></div>
+            </div>
+            <div id="overviewPulseWidget" class="shrink-0 bg-dark-950/90 border border-slate-800 rounded-lg p-3 min-w-[270px]">
+              <div class="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-1">90-Day PR Throughput</div>
+              <div class="text-xs text-slate-500 italic">Loading pulse...</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. 4 Reconciled KPI Cards -->
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" id="overviewKpis"></div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <!-- Highest Risk PRs -->
-          <div class="lg:col-span-2 bg-dark-900 border border-slate-800 rounded-xl p-5">
-            <div class="flex items-center justify-between mb-4">
+        <!-- 3. Differentiators Front & Center: Live Merge Races + Foundational Stack Unblockers -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <!-- Middle-Left: Top Live Merge Races -->
+          <div class="bg-dark-900 border border-amber-500/30 rounded-xl p-5 shadow-lg">
+            <div class="flex items-center justify-between gap-2 mb-3">
               <div>
                 <h2 class="text-sm font-bold text-white flex items-center gap-2">
-                  <i class="ph-bold ph-warning text-rose-400"></i> Highest Change-Risk Open PRs
+                  <i class="ph-bold ph-warning-diamond text-amber-400"></i> Top Live Merge Races
+                  <span class="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-300 border border-rose-500/30 font-mono">&lt;5d active</span>
                 </h2>
-                <p class="text-xs text-slate-400 mt-0.5">Weighted by core path sensitivity, line churn, and active collision races</p>
+                <p class="text-xs text-slate-400 mt-0.5">Concurrent PR pairs actively modifying overlapping files right now</p>
+              </div>
+              <a href="/collisions" onclick="return navClick(event, 'collisions')" class="text-xs text-amber-400 hover:underline font-medium shrink-0">Collision Radar →</a>
+            </div>
+            <div id="overviewLiveCollisions" class="space-y-2.5"></div>
+          </div>
+
+          <!-- Middle-Right: Foundational Stack Unblockers -->
+          <div class="bg-dark-900 border border-fuchsia-500/30 rounded-xl p-5 shadow-lg">
+            <div class="flex items-center justify-between gap-2 mb-3">
+              <div>
+                <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                  <i class="ph-bold ph-tree-structure text-fuchsia-400"></i> Foundational Stack Unblockers
+                </h2>
+                <p class="text-xs text-slate-400 mt-0.5">Base PRs whose merge unblocks the largest downstream dependency chains</p>
+              </div>
+              <a href="/dag" onclick="return navClick(event, 'dag')" class="text-xs text-fuchsia-400 hover:underline font-medium shrink-0">Dependency DAG →</a>
+            </div>
+            <div id="overviewStackUnblockers" class="space-y-2.5"></div>
+          </div>
+        </div>
+
+        <!-- 4. Auditable Change Risk + Reconciled Triage & Whose Move -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <!-- Highest Risk PRs (Actionable First) -->
+          <div class="lg:col-span-2 bg-dark-900 border border-slate-800 rounded-xl p-5">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+              <div>
+                <div class="flex flex-wrap items-center gap-2">
+                  <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                    <i class="ph-bold ph-warning text-rose-400"></i> Highest Change-Risk Actionable PRs
+                  </h2>
+                  <button onclick="openRiskFormulaModal()" class="text-[11px] px-2 py-0.5 rounded-full bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 font-mono transition inline-flex items-center gap-1" title="Inspect weights, thresholds, and full path sensitivity table">
+                    <i class="ph-bold ph-question"></i> Formula
+                  </button>
+                  <span id="overviewHighRiskSplit" class="text-[11px] px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-300 border border-rose-500/20 font-mono"></span>
+                </div>
+                <p class="text-xs text-slate-400 mt-1 font-mono">100 × (0.50·Sensitivity + 0.20·Churn + 0.30·LiveCollisions) · thresholds 80/60/30</p>
               </div>
               <a href="/triage" onclick="return navClick(event, 'triage')" class="text-xs text-emerald-400 hover:underline font-medium">Open Triage Board →</a>
             </div>
             <div id="overviewTopRisk" class="space-y-2.5"></div>
           </div>
 
-          <!-- Status & Review-Loop Breakdown -->
+          <!-- Status & Review-Loop Breakdown (Strictly Reconciled) -->
           <div class="bg-dark-900 border border-slate-800 rounded-xl p-5 space-y-5">
             <div>
-              <h2 class="text-sm font-bold text-white flex items-center gap-2">
-                <i class="ph-bold ph-chart-bar text-cyan-400"></i> Triage Breakdown
-              </h2>
+              <div class="flex items-center justify-between">
+                <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                  <i class="ph-bold ph-chart-bar text-cyan-400"></i> Triage Breakdown
+                </h2>
+                <span id="overviewTriageSumTag" class="text-[10px] font-mono text-slate-500">100%</span>
+              </div>
               <div id="overviewStatusBars" class="mt-3 space-y-2"></div>
             </div>
             <div class="border-t border-slate-800 pt-4">
-              <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">Whose Move Is It?</h3>
+              <div class="flex items-center justify-between">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">Whose Move Is It?</h3>
+                <span class="text-[10px] font-mono text-emerald-400/80" title="CI failures and merge conflicts belong to the author (PR hygiene); Ready to Merge matches Triage exactly.">Reconciled ✓</span>
+              </div>
               <div id="overviewWaitingBars" class="mt-2.5 grid grid-cols-2 gap-2"></div>
             </div>
           </div>
         </div>
 
+        <!-- 5. Actionable Reviewer Queues + Hottest Contended Files -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <!-- Top Hotspots Summary -->
+          <!-- Top Actionable Reviewers -->
           <div class="bg-dark-900 border border-slate-800 rounded-xl p-5">
-            <div class="flex items-center justify-between mb-3">
-              <h2 class="text-sm font-bold text-white flex items-center gap-2">
-                <i class="ph-fill ph-fire text-rose-500"></i> Hottest Contended Files
-              </h2>
-              <a href="/collisions" onclick="return navClick(event, 'collisions')" class="text-xs text-amber-400 hover:underline font-medium">Inspect Collisions →</a>
+            <div class="flex items-center justify-between gap-2 mb-3">
+              <div>
+                <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                  <i class="ph-bold ph-users text-violet-400"></i> Busiest Actionable Reviewer Queues
+                  <span class="text-slate-400 hover:text-white cursor-help" title="Actionable = non-draft, CI green/pending, non-conflicting, stack-unblocked PRs where the ball is on the reviewer (overdue review requests >30d included &amp; badged). Raw pending = all open GitHub reviewRequests (incl. CODEOWNERS auto-assignments, drafts &amp; failing CI). Team requests (@team/...) are separated.">
+                    <i class="ph-bold ph-info text-sm"></i>
+                  </span>
+                </h2>
+                <p class="text-[11px] text-slate-400 mt-0.5">Individual maintainers ranked by <strong class="text-emerald-300">Actionable Now</strong> (raw requests &amp; stale review requests &gt;30d alongside)</p>
+              </div>
+              <a href="/reviewers" onclick="return navClick(event, 'reviewers')" class="text-xs text-violet-400 hover:underline font-medium shrink-0">Full Table →</a>
             </div>
-            <div id="overviewHotspots" class="space-y-2"></div>
+            <div id="overviewReviewerCoverage" class="mb-3 px-2.5 py-1.5 rounded-lg bg-dark-950 border border-slate-800/80 text-[10px] font-mono text-slate-400"></div>
+            <div id="overviewReviewers" class="space-y-2"></div>
           </div>
 
-          <!-- Top Overloaded Reviewers -->
+          <!-- Top Hotspots Summary -->
           <div class="bg-dark-900 border border-slate-800 rounded-xl p-5">
-            <div class="flex items-center justify-between mb-3">
-              <h2 class="text-sm font-bold text-white flex items-center gap-2">
-                <i class="ph-bold ph-users text-violet-400"></i> Busiest Reviewer Queues
-              </h2>
-              <a href="/reviewers" onclick="return navClick(event, 'reviewers')" class="text-xs text-violet-400 hover:underline font-medium">Full Reviewer Table →</a>
+            <div class="flex items-center justify-between gap-2 mb-3">
+              <div>
+                <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                  <i class="ph-fill ph-fire text-rose-500"></i> Hottest Contended Files
+                </h2>
+                <p class="text-[11px] text-slate-400 mt-0.5">Click any file to filter pairwise collisions to that exact path</p>
+              </div>
+              <a href="/collisions" onclick="return navClick(event, 'collisions')" class="text-xs text-amber-400 hover:underline font-medium shrink-0">Inspect Collisions →</a>
             </div>
-            <div id="overviewReviewers" class="space-y-2"></div>
+            <div id="overviewHotspots" class="space-y-2"></div>
           </div>
         </div>
       </div>
@@ -462,10 +540,19 @@
                 <i class="ph-bold ph-users text-violet-400 text-base"></i>
                 Reviewer Directory &amp; Workload
                 <span id="colCountReviewers" class="text-xs px-2 py-0.5 rounded-full bg-dark-850 text-violet-300 font-mono border border-violet-500/30">0</span>
+                <span class="text-slate-400 hover:text-white cursor-help" title="Actionable Now = non-draft, CI green/pending, non-conflicting, stack-unblocked PRs where the ball is on the reviewer (overdue >30d PRs included &amp; badged). Raw Pending = all open PRs listing the reviewer in GitHub reviewRequests (includes CODEOWNERS auto-assignments, drafts &amp; failing CI).">
+                  <i class="ph-bold ph-info text-sm"></i>
+                </span>
               </h2>
-              <p class="text-xs text-slate-400 mt-0.5">Click any reviewer row to open their prioritized <strong>Action Inbox</strong></p>
+              <p class="text-xs text-slate-400 mt-0.5">Ranked by <strong class="text-emerald-300">Actionable Now</strong> — click any row to open their prioritized Action Inbox</p>
             </div>
-            <div id="reviewerWaitingSummary" class="text-xs text-slate-400 font-mono"></div>
+            <div class="flex flex-wrap items-center gap-3">
+              <label class="flex items-center gap-1.5 bg-dark-850 border border-slate-700 px-2.5 py-1 rounded-md text-xs text-slate-300 cursor-pointer">
+                <input type="checkbox" id="includeTeamsToggle" onchange="fetchReviewers()" class="accent-violet-500">
+                <span>Include @team queues</span>
+              </label>
+              <div id="reviewerWaitingSummary" class="text-xs text-slate-400 font-mono"></div>
+            </div>
           </div>
 
           <div class="overflow-x-auto">
@@ -473,8 +560,9 @@
               <thead>
                 <tr class="border-b border-slate-800 text-slate-400 uppercase text-[10px] tracking-wider font-mono">
                   <th class="py-2.5 px-3">Reviewer</th>
-                  <th class="py-2.5 px-3 text-right">Pending Requests</th>
-                  <th class="py-2.5 px-3 text-right">Oldest Wait</th>
+                  <th class="py-2.5 px-3 text-right" title="Non-draft, CI green/pending, non-conflicting, stack-unblocked PRs waiting on reviewer (includes overdue review requests >30d)">Actionable Now</th>
+                  <th class="py-2.5 px-3 text-right" title="Raw GitHub reviewRequests across all open PRs (includes CODEOWNERS, drafts &amp; failing CI) and stale review requests >30d">Raw Pending (Stale Req &gt;30d)</th>
+                  <th class="py-2.5 px-3 text-right">Oldest Actionable</th>
                   <th class="py-2.5 px-3 text-right">Reviewed</th>
                   <th class="py-2.5 px-3 text-right">Approved</th>
                   <th class="py-2.5 px-3 text-right">Changes Req.</th>
@@ -579,9 +667,13 @@
 
         <div class="bg-dark-950 border border-slate-800 rounded-lg p-3">
           <div class="flex items-center justify-between">
-            <span class="text-xs uppercase font-bold text-slate-500 tracking-wider">Change Risk</span>
+            <div class="flex items-center gap-2">
+              <span class="text-xs uppercase font-bold text-slate-500 tracking-wider">Change Risk</span>
+              <button onclick="openRiskFormulaModal()" class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 font-mono transition">? Formula</button>
+            </div>
             <span id="drawerRiskBadge" class="text-xs px-2 py-0.5 rounded font-bold font-mono bg-slate-800 text-slate-300">0 LOW</span>
           </div>
+          <div id="drawerRiskMath" class="mt-2 px-2.5 py-1.5 rounded bg-dark-900 border border-slate-800/80 font-mono text-[11px] text-cyan-300"></div>
           <div id="drawerRiskAreas" class="flex flex-wrap gap-1 mt-2"></div>
           <ul id="drawerRiskReasons" class="mt-2 space-y-1 text-xs text-slate-300 list-disc list-inside"></ul>
         </div>
@@ -644,6 +736,22 @@
     </aside>
 
   </main>
+
+  <!-- Published Risk Formula Modal -->
+  <div id="riskFormulaModal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onclick="if (event.target === this) closeRiskFormulaModal()">
+    <div class="bg-dark-900 border border-slate-700 rounded-2xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+      <div class="px-5 py-4 border-b border-slate-800 bg-dark-850 flex items-center justify-between">
+        <div>
+          <h3 class="text-sm font-bold text-white flex items-center gap-2">
+            <i class="ph-bold ph-function text-cyan-400 text-base"></i> How Change Risk Is Scored (Published Formula)
+          </h3>
+          <p class="text-[11px] text-slate-400 mt-0.5">Deterministic, reproducible score computed for every PR — click any PR to audit its exact math</p>
+        </div>
+        <button onclick="closeRiskFormulaModal()" class="text-slate-400 hover:text-white p-1"><i class="ph ph-x text-base"></i></button>
+      </div>
+      <div id="riskFormulaBody" class="p-5 overflow-y-auto space-y-4 text-xs"></div>
+    </div>
+  </div>
 
   <script>
     const API_BASE = '/api/v1';
@@ -869,6 +977,9 @@
 
       if (path === '/reviewers') {
         let rows = await loadStaticJson('reviewers.json');
+        if (String(params.include_teams) === 'false') {
+          rows = rows.filter(r => !r.is_team && !(r.reviewer || '').startsWith('@team/'));
+        }
         if (params.search) {
           const q = String(params.search).toLowerCase();
           rows = rows.filter(r => (r.reviewer || '').toLowerCase().includes(q));
@@ -878,22 +989,36 @@
 
       if (path.startsWith('/reviewers/') && path !== '/reviewers') {
         const handle = decodeURIComponent(path.slice('/reviewers/'.length)).toLowerCase();
+        const isTeam = handle.startsWith('@team/');
+        const teamName = isTeam ? handle.slice('@team/'.length) : '';
         const revs = await loadStaticJson('reviewers.json');
         const dossiersMap = await loadStaticJson('dossiers.json');
         const rMatches = revs.filter(r => (r.reviewer || '').toLowerCase() === handle);
         const summary = rMatches[0] || {
           reviewer: handle,
+          is_team: isTeam,
+          actionable_pending: 0,
+          actionable_stale_30d: 0,
           pending_requests: 0,
+          stale_pending_30d: 0,
           reviews_submitted: 0,
           approvals: 0,
           changes_requested: 0,
+          actionable_pr_numbers: [],
           pending_pr_numbers: [],
+          oldest_actionable_days: 0.0,
           oldest_pending_days: 0.0,
         };
         const pendingNums = new Set(summary.pending_pr_numbers || []);
         Object.values(dossiersMap).forEach(d => {
-          const reqs = ((d.review_flow || {}).requested_reviewers || []).map(x => String(x).toLowerCase());
-          if (reqs.includes(handle)) pendingNums.add(d.number);
+          const flow = d.review_flow || {};
+          if (isTeam) {
+            const teams = (flow.requested_teams || []).map(x => String(x).toLowerCase());
+            if (teams.includes(teamName)) pendingNums.add(d.number);
+          } else {
+            const reqs = (flow.requested_reviewers || []).map(x => String(x).toLowerCase());
+            if (reqs.includes(handle)) pendingNums.add(d.number);
+          }
         });
         const dossiers = Array.from(pendingNums).map(n => dossiersMap[String(n)]).filter(Boolean);
 
@@ -908,17 +1033,18 @@
           const ci = d.ci_status;
           const is_draft = Boolean(d.is_draft);
           const blocks = d.blocks || [];
+          const blocked_by = d.blocked_by || [];
           const files = d.files_changed_count || 0;
           const lines = d.lines_changed || 0;
           const waiting_on = flow.waiting_on;
 
           if (blocks.length > 0) stack_unblockers.push(d);
-          if (waiting_on === 'REVIEWER' && !is_draft && ['SUCCESS', 'PENDING', 'UNKNOWN'].includes(ci) && !['CONFLICTING', 'CI_FAILURE', 'BLOCKED_BY_DEP', 'DRAFT'].includes(status)) {
+          if (waiting_on === 'REVIEWER' && !is_draft && !blocked_by.length && d.mergeable !== 'CONFLICTING' && ci !== 'FAILURE') {
             ready_decision.push(d);
-          } else if (waiting_on === 'AUTHOR' || ['CHANGES_REQUESTED', 'CI_FAILURE', 'CONFLICTING', 'DRAFT'].includes(status) || is_draft || (d.staleness_days || 0) >= 45) {
+          } else if (waiting_on === 'AUTHOR' || waiting_on === 'NONE' || ['CHANGES_REQUESTED', 'CI_FAILURE', 'CONFLICTING', 'DRAFT', 'BLOCKED_BY_DEP'].includes(status) || is_draft) {
             stale_or_author.push(d);
           }
-          if ((files <= 3 || lines <= 60 || d.risk_level === 'LOW') && !is_draft && ci === 'SUCCESS' && !['CONFLICTING', 'CI_FAILURE'].includes(status)) {
+          if (waiting_on === 'REVIEWER' && (files <= 3 || lines <= 60 || d.risk_level === 'LOW') && !is_draft && !blocked_by.length && ci === 'SUCCESS' && !['CONFLICTING', 'CI_FAILURE'].includes(status)) {
             quick_wins.push(d);
           }
         });
@@ -1178,16 +1304,22 @@
         const h = await hRes.json();
         lastOverview = d;
         if (d.repo) syncRepoSelector(d.repo);
-        document.getElementById('statTotalPrs').textContent = d.total_open_prs;
-        document.getElementById('statStacks').textContent = d.dependency_stacks_count;
+        document.getElementById('statTotalPrs').textContent = (d.total_open_prs ?? 0).toLocaleString();
+        document.getElementById('statStacks').textContent = (d.dependency_stacks_count ?? 0).toLocaleString();
         const rb = d.risk_breakdown || {};
-        document.getElementById('statHighRisk').textContent = (rb.CRITICAL || 0) + (rb.HIGH || 0);
+        const rba = d.risk_breakdown_actionable || {};
+        const highAll = (rb.CRITICAL || 0) + (rb.HIGH || 0);
+        const highAct = (rba.CRITICAL || 0) + (rba.HIGH || 0);
+        document.getElementById('statHighRisk').textContent = `${highAct} actionable (${highAll} open)`;
         const syncedEl = document.getElementById('statSynced');
-        const refreshNote = h.refreshing ? ' · syncing…' : (h.sync_note ? ` · ${h.sync_note}` : '');
+        const modeLabel = (d.sync_mode === 'hourly-snapshot' || d.sync_mode === 'static-snapshot')
+          ? 'hourly snapshot'
+          : (d.sync_mode || 'cache');
+        const refreshNote = h.refreshing ? ' · syncing…' : '';
         syncedEl.textContent = (d.last_synced_at
-          ? `synced ${formatAge(d.last_synced_at)} (${d.sync_mode || 'cache'})`
+          ? `synced ${formatAge(d.last_synced_at)} · ${modeLabel}`
           : 'not synced') + refreshNote;
-        if (h.sync_note) syncedEl.title = h.sync_note;
+        syncedEl.title = h.sync_note || 'Updated hourly via GitHub GraphQL';
         if (activePage === 'overview') renderOverview();
       } catch (e) {
         console.error('Error fetching overview:', e);
@@ -1267,84 +1399,398 @@
       }
     }
 
-    // PAGE 0: Overview Renderer
+    // Risk Formula Modal
+    function openRiskFormulaModal() {
+      const modal = document.getElementById('riskFormulaModal');
+      const body = document.getElementById('riskFormulaBody');
+      if (!modal || !body) return;
+      const spec = (lastOverview && lastOverview.risk_formula) || {
+        equation: 'score = round(100 × (0.50 × sensitivity + 0.20 × churn + 0.30 × collision))',
+        weights: { sensitivity: 0.5, churn: 0.2, collision: 0.3 },
+        thresholds: { CRITICAL: 80, HIGH: 60, MEDIUM: 30, LOW: 0 },
+        churn_saturation_lines: 1500,
+        collision_weights: { live_critical: 0.4, live_high: 0.2, live_window_days: 5 },
+        multi_file_boost: 'max_weight × (1 + 0.05 × (sensitive_files - 1)), capped at 1.0',
+        path_rules: [],
+      };
+      const rules = spec.path_rules || [];
+      body.innerHTML = `
+        <div class="bg-dark-950 border border-cyan-500/30 rounded-xl p-3.5 font-mono text-cyan-300 text-xs">
+          ${esc(spec.equation)}
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center font-mono">
+          <div class="p-2 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-300"><div class="font-bold">≥ ${spec.thresholds.CRITICAL}</div><div class="text-[10px]">CRITICAL</div></div>
+          <div class="p-2 rounded-lg bg-orange-500/15 border border-orange-500/30 text-orange-300"><div class="font-bold">${spec.thresholds.HIGH}–${spec.thresholds.CRITICAL - 1}</div><div class="text-[10px]">HIGH</div></div>
+          <div class="p-2 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300"><div class="font-bold">${spec.thresholds.MEDIUM}–${spec.thresholds.HIGH - 1}</div><div class="text-[10px]">MEDIUM</div></div>
+          <div class="p-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300"><div class="font-bold">&lt; ${spec.thresholds.MEDIUM}</div><div class="text-[10px]">LOW</div></div>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          <div class="bg-dark-950 border border-slate-800 rounded-lg p-3">
+            <div class="font-bold text-white mb-1">50% Path Sensitivity</div>
+            <p class="text-slate-400 text-[11px]">Max matched path weight (0–1), boosted by +5% per extra sensitive file touched (${esc(spec.multi_file_boost)}).</p>
+          </div>
+          <div class="bg-dark-950 border border-slate-800 rounded-lg p-3">
+            <div class="font-bold text-white mb-1">20% Line Churn</div>
+            <p class="text-slate-400 text-[11px]"><code>min(1.0, (additions + deletions) / ${spec.churn_saturation_lines})</code>. Saturates at ${spec.churn_saturation_lines.toLocaleString()} lines.</p>
+          </div>
+          <div class="bg-dark-950 border border-slate-800 rounded-lg p-3">
+            <div class="font-bold text-white mb-1">30% Live Collisions</div>
+            <p class="text-slate-400 text-[11px]"><code>min(1.0, ${spec.collision_weights.live_critical}×CRIT + ${spec.collision_weights.live_high}×HIGH)</code> for active races only (both PRs pushed &lt;${spec.collision_weights.live_window_days}d). Stale overlaps score 0.</p>
+          </div>
+        </div>
+        <div>
+          <div class="text-[11px] uppercase tracking-wider font-bold text-slate-400 mb-2">Path Sensitivity Weight Table (${rules.length} rules, first match wins)</div>
+          <div class="border border-slate-800 rounded-lg overflow-hidden">
+            <table class="w-full text-left text-[11px] font-mono border-collapse">
+              <thead>
+                <tr class="bg-dark-950 border-b border-slate-800 text-slate-400">
+                  <th class="py-2 px-3">Subsystem Label</th>
+                  <th class="py-2 px-3">Path Regex</th>
+                  <th class="py-2 px-3 text-right">Weight</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-800/60">
+                ${rules.map(r => `
+                  <tr class="hover:bg-dark-850/50">
+                    <td class="py-1.5 px-3 text-slate-200 font-sans font-medium">${esc(r.label)}</td>
+                    <td class="py-1.5 px-3 text-slate-400 break-all">${esc(r.pattern)}</td>
+                    <td class="py-1.5 px-3 text-right font-bold ${r.weight >= 0.8 ? 'text-rose-400' : (r.weight >= 0.6 ? 'text-amber-300' : 'text-slate-400')}">${Number(r.weight).toFixed(1)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+      modal.classList.remove('hidden');
+    }
+
+    function closeRiskFormulaModal() {
+      const modal = document.getElementById('riskFormulaModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function renderPulseSparkline(pulse) {
+      const container = document.getElementById('overviewPulseWidget');
+      if (!container) return;
+      if (!pulse || !pulse.weekly_90d || !pulse.weekly_90d.length) {
+        container.innerHTML = `
+          <div class="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-1">90-Day PR Throughput</div>
+          <div class="text-[11px] text-slate-400 font-mono">Run <code>pr-radar sync</code> with GitHub auth to load 90-day opened/merged pulse.</div>`;
+        return;
+      }
+      const wks = pulse.weekly_90d;
+      const W = 250, H = 56, pad = 4;
+      const maxV = Math.max(1, ...wks.map(w => Math.max(w.opened || 0, w.merged || 0)));
+      const xAt = i => wks.length <= 1 ? pad : pad + (i / (wks.length - 1)) * (W - pad * 2);
+      const yAt = v => H - pad - ((v || 0) / maxV) * (H - pad * 2);
+      const ptsOpen = wks.map((w, i) => `${xAt(i).toFixed(1)},${yAt(w.opened).toFixed(1)}`).join(' ');
+      const ptsMerge = wks.map((w, i) => `${xAt(i).toFixed(1)},${yAt(w.merged).toFixed(1)}`).join(' ');
+      const net7 = (pulse.opened_7d || 0) - (pulse.merged_7d || 0);
+      const netSign = net7 >= 0 ? `+${net7}` : `${net7}`;
+      container.innerHTML = `
+        <div class="flex items-center justify-between gap-2 mb-1">
+          <span class="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Repo Pulse (7d / 90d)</span>
+          <span class="text-[10px] font-mono text-slate-400">net ${netSign}/wk</span>
+        </div>
+        <div class="flex items-center gap-3 text-xs font-mono mb-1.5">
+          <span class="text-amber-300 font-bold">+${(pulse.opened_7d || 0).toLocaleString()} opened</span>
+          <span class="text-slate-600">/</span>
+          <span class="text-emerald-400 font-bold">${(pulse.merged_7d || 0).toLocaleString()} merged</span>
+          <span class="text-[10px] text-slate-500">(7d)</span>
+        </div>
+        <svg viewBox="0 0 ${W} ${H}" class="w-full h-14 overflow-visible" aria-label="90-day weekly PR throughput">
+          <polyline fill="none" stroke="#fbbf24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" points="${ptsOpen}" />
+          <polyline fill="none" stroke="#34d399" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="${ptsMerge}" />
+          ${wks.map((w, i) => `<circle cx="${xAt(i).toFixed(1)}" cy="${yAt(w.merged).toFixed(1)}" r="2" fill="#34d399"><title>${w.week_start}..${w.week_end}: +${w.opened} opened / ${w.merged} merged</title></circle>`).join('')}
+        </svg>
+        <div class="flex items-center justify-between text-[10px] font-mono text-slate-500 mt-0.5">
+          <span>${esc(wks[0].week_start.slice(5))}</span>
+          <span>30d: +${(pulse.opened_30d || 0).toLocaleString()} / ${(pulse.merged_30d || 0).toLocaleString()} merged</span>
+          <span>${esc(wks[wks.length - 1].week_end.slice(5))}</span>
+        </div>
+      `;
+    }
+
+    // PAGE 0: Overview Renderer (Reconciled, Auditable, Differentiators First)
     function renderOverview() {
       const d = lastOverview;
       if (!d) return;
+      const total = Math.max(1, d.total_open_prs || 1);
       const rb = d.risk_breakdown || {};
-      const highCrit = (rb.CRITICAL || 0) + (rb.HIGH || 0);
+      const rba = d.risk_breakdown_actionable || {};
+      const highAll = (rb.CRITICAL || 0) + (rb.HIGH || 0);
+      const highAct = (rba.CRITICAL || 0) + (rba.HIGH || 0);
       const sb = d.status_breakdown || {};
       const wb = d.waiting_on_breakdown || {};
+      const wd = d.waiting_on_detail || {
+        reviewer_active: sb.WAITING_REVIEW || 0,
+        reviewer_stale: Math.max(0, (wb.REVIEWER || 0) - (sb.WAITING_REVIEW || 0)),
+        author_ci_or_conflict: (sb.CI_FAILURE || 0) + (sb.CONFLICTING || 0),
+        author_feedback: Math.max(0, (wb.AUTHOR || 0) - ((sb.CI_FAILURE || 0) + (sb.CONFLICTING || 0))),
+        merge_ready: sb.READY_TO_MERGE || 0,
+        draft: sb.DRAFT || 0,
+        stack_blocked: sb.BLOCKED_BY_DEP || 0,
+      };
 
+      // 1. Reconciled Triage Insight Banner (dynamically computed from post-fix numbers)
+      const onReviewer = wb.REVIEWER || 0;
+      const readyMerge = sb.READY_TO_MERGE || 0;
+      const notOnReviewer = Math.max(0, (d.total_open_prs || 0) - onReviewer - readyMerge);
+      const notOnReviewerPct = Math.round((notOnReviewer / total) * 100);
+      const ciPct = Math.round(((sb.CI_FAILURE || 0) / total) * 100);
+      const draftPct = Math.round(((sb.DRAFT || 0) / total) * 100);
+      const conflictPct = Math.round(((sb.CONFLICTING || 0) / total) * 100);
+      const revPct = Math.round((onReviewer / total) * 100);
+
+      const freshTag = document.getElementById('overviewFreshnessTag');
+      if (freshTag) {
+        freshTag.textContent = d.last_synced_at
+          ? `Updated hourly via GitHub GraphQL · synced ${formatAge(d.last_synced_at)}`
+          : 'Updated hourly via GitHub GraphQL';
+      }
+      const headlineEl = document.getElementById('overviewInsightHeadline');
+      if (headlineEl) {
+        headlineEl.innerHTML = `Of <strong class="text-white font-mono">${(d.total_open_prs || 0).toLocaleString()}</strong> open PRs, <strong class="text-emerald-300 font-mono">${notOnReviewerPct}% (${notOnReviewer.toLocaleString()})</strong> aren't waiting on a human reviewer — <strong class="text-rose-300 font-mono">${ciPct}%</strong> fail CI, <strong class="text-slate-300 font-mono">${draftPct}%</strong> are drafts, and <strong class="text-orange-300 font-mono">${conflictPct}%</strong> have merge conflicts. Only <strong class="text-cyan-300 font-mono">${onReviewer.toLocaleString()} (${revPct}%)</strong> are healthy &amp; awaiting review, and <strong class="text-emerald-400 font-mono">${readyMerge.toLocaleString()}</strong> are approved &amp; merge-ready.`;
+      }
+      const subEl = document.getElementById('overviewInsightSub');
+      if (subEl) {
+        subEl.innerHTML = `
+          <span class="px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">On Reviewer: ${onReviewer.toLocaleString()} (${wd.reviewer_active} active + ${wd.reviewer_stale} stale PRs ≥14d)</span>
+          <span class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20" title="Approved + CI green/pending + non-conflicting + stack-unblocked + non-draft (includes mergeable: UNKNOWN)">Ready to Merge: ${readyMerge.toLocaleString()}</span>
+          <span class="px-2 py-0.5 rounded bg-rose-500/10 text-rose-300 border border-rose-500/20">Live Merge Races (&lt;5d): ${(d.live_race_collisions_count || 0).toLocaleString()}</span>
+        `;
+      }
+      renderPulseSparkline(d.repo_pulse);
+
+      // 2. 4 Reconciled KPI Cards
       document.getElementById('overviewKpis').innerHTML = [
-        { label: 'Open PRs Indexed', val: d.total_open_prs, sub: `${sb.READY_TO_MERGE || 0} ready to merge`, page: 'triage', accent: 'text-emerald-400 border-emerald-500/20' },
-        { label: 'Dependency Stacks', val: d.dependency_stacks_count, sub: `${(d.foundational_unblockers || []).length} foundational bases`, page: 'dag', accent: 'text-fuchsia-400 border-fuchsia-500/20' },
-        { label: 'Critical File Collisions', val: d.critical_file_collisions, sub: `${highCrit} high/critical risk PRs`, page: 'collisions', accent: 'text-rose-400 border-rose-500/20' },
-        { label: 'Median Reviewer Wait', val: `${d.median_reviewer_wait_days ?? 0}d`, sub: `${wb.REVIEWER || 0} PRs waiting on review`, page: 'reviewers', accent: 'text-violet-400 border-violet-500/20' },
+        {
+          label: 'Open PRs Indexed',
+          val: (d.total_open_prs || 0).toLocaleString(),
+          sub: `${readyMerge.toLocaleString()} ready to merge · ${notOnReviewerPct}% hygiene/draft/stack`,
+          page: 'triage',
+          accent: 'text-emerald-400 border-emerald-500/20',
+        },
+        {
+          label: 'Dependency Stacks',
+          val: (d.dependency_stacks_count || 0).toLocaleString(),
+          sub: `${(d.foundational_unblockers || []).length} foundational base PRs`,
+          page: 'dag',
+          accent: 'text-fuchsia-400 border-fuchsia-500/20',
+        },
+        {
+          label: 'Live Merge Races (<5d)',
+          val: (d.live_race_collisions_count ?? d.critical_file_collisions ?? 0).toLocaleString(),
+          sub: `${(d.critical_file_collisions || 0).toLocaleString()} total CRITICAL overlaps`,
+          page: 'collisions',
+          accent: 'text-rose-400 border-rose-500/20',
+        },
+        {
+          label: 'Actionable Review Queue',
+          val: onReviewer.toLocaleString(),
+          sub: `${wd.reviewer_active} active + ${wd.reviewer_stale} stale · median ${d.median_reviewer_wait_days ?? 0}d wait`,
+          page: 'reviewers',
+          accent: 'text-violet-400 border-violet-500/20',
+        },
       ].map(k => `
         <a href="${pageHref(k.page)}" onclick="return navClick(event, '${k.page}')" class="bg-dark-900 border ${k.accent} hover:border-slate-600 rounded-xl p-4 transition block">
           <div class="text-xs text-slate-400 font-medium">${k.label}</div>
           <div class="text-2xl font-bold mt-1 font-mono ${k.accent.split(' ')[0]}">${k.val}</div>
-          <div class="text-[11px] text-slate-500 mt-1">${esc(k.sub)}</div>
+          <div class="text-[11px] text-slate-400 mt-1">${esc(k.sub)}</div>
         </a>
       `).join('');
 
-      document.getElementById('overviewTopRisk').innerHTML = (d.top_risk_prs || []).map(p => `
-        <div onclick="openDrawer(${p.number})" class="cursor-pointer bg-dark-950 border border-slate-800 hover:border-slate-600 rounded-lg p-3 flex items-center justify-between gap-3">
-          <div class="min-w-0">
-            <div class="flex items-center gap-2 text-xs">
-              <span class="font-mono font-bold text-cyan-400">#${p.number}</span>${ghLink(p.number)}
-              ${riskBadge(p)}
-            </div>
-            <p class="text-xs text-slate-200 font-medium mt-1 truncate">${esc(p.title)}</p>
-          </div>
-          <div class="flex flex-wrap gap-1 justify-end shrink-0 max-w-xs">
-            ${(p.sensitive_areas || []).slice(0, 2).map(a => `<span class="px-1.5 py-0.5 rounded text-[10px] bg-rose-500/10 text-rose-300 border border-rose-500/20">${esc(a)}</span>`).join('')}
-          </div>
-        </div>
-      `).join('') || '<span class="text-xs text-slate-500 italic">No PRs indexed.</span>';
+      // 3A. Middle-Left: Top Live Merge Races (Collision Radar Differentiator)
+      const liveCols = d.top_live_collisions || [];
+      document.getElementById('overviewLiveCollisions').innerHTML = liveCols.length
+        ? liveCols.map(c => {
+            const firstFile = (c.overlapping_files || [])[0] || '';
+            const extraFiles = Math.max(0, (c.overlapping_files || []).length - 1);
+            return `
+              <div class="bg-dark-950 border border-slate-800 hover:border-amber-500/40 rounded-lg p-3 transition">
+                <div class="flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <div class="flex items-center gap-1.5 font-mono">
+                    <span onclick="openDrawer(${c.pr_a})" class="cursor-pointer font-bold text-cyan-400 hover:underline">#${c.pr_a}</span>${ghLink(c.pr_a)}
+                    <span class="text-slate-500 text-[10px]">(${Number(c.pr_a_idle_days || 0).toFixed(0)}d)</span>
+                    <span class="text-amber-400 font-bold">⚔</span>
+                    <span onclick="openDrawer(${c.pr_b})" class="cursor-pointer font-bold text-cyan-400 hover:underline">#${c.pr_b}</span>${ghLink(c.pr_b)}
+                    <span class="text-slate-500 text-[10px]">(${Number(c.pr_b_idle_days || 0).toFixed(0)}d)</span>
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-[10px] px-1.5 py-0.5 rounded font-mono font-bold ${c.risk_level === 'CRITICAL' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'}">${esc(c.risk_level)} · ${c.shared_churn} lines</span>
+                  </div>
+                </div>
+                <div class="mt-1.5 text-[11px] text-slate-300 truncate">${esc(c.pr_a_title)} <span class="text-slate-500">vs</span> ${esc(c.pr_b_title)}</div>
+                <div class="mt-2 flex items-center justify-between gap-2">
+                  <span class="font-mono text-[10px] text-slate-400 truncate" title="${esc((c.overlapping_files || []).join(', '))}">${esc(firstFile)}${extraFiles > 0 ? ` +${extraFiles} more` : ''}</span>
+                  <div class="flex items-center gap-1.5 shrink-0">
+                    <button onclick="activeCollisionFile='${esc(firstFile).replace(/'/g, "\\'")}'; navClick(event, 'collisions');" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-semibold border border-slate-700">Inspect</button>
+                    <button onclick="navClick(event, 'simulator'); runSimulation(${c.pr_a});" class="px-2 py-0.5 rounded bg-fuchsia-600/20 hover:bg-fuchsia-600/35 text-fuchsia-300 text-[10px] font-semibold border border-fuchsia-500/40">Sim #${c.pr_a}</button>
+                  </div>
+                </div>
+              </div>`;
+          }).join('')
+        : '<div class="text-xs text-slate-500 italic py-4 text-center">No active &lt;5d CRITICAL/HIGH merge races detected right now.</div>';
 
-      const total = Math.max(1, d.total_open_prs || 1);
-      const statusEntries = [
-        ['READY_TO_MERGE', 'Ready to Merge', 'bg-emerald-400'],
-        ['BLOCKED_BY_DEP', 'Blocked by Stack', 'bg-fuchsia-400'],
-        ['WAITING_REVIEW', 'Waiting on Review', 'bg-cyan-400'],
-        ['CHANGES_REQUESTED', 'Waiting on Author', 'bg-amber-400'],
-        ['CI_FAILURE', 'CI Failure', 'bg-rose-400'],
-        ['CONFLICTING', 'Conflicting', 'bg-orange-400'],
-        ['DRAFT', 'Draft', 'bg-slate-500'],
-      ];
-      document.getElementById('overviewStatusBars').innerHTML = statusEntries.map(([key, label, barCls]) => {
-        const cnt = sb[key] || 0;
-        const pct = Math.round((cnt / total) * 100);
+      // 3B. Middle-Right: Foundational Stack Unblockers (Dependency DAG Differentiator)
+      const unblockers = d.top_stack_unblockers || [];
+      document.getElementById('overviewStackUnblockers').innerHTML = unblockers.length
+        ? unblockers.map(u => {
+            const ciTag = u.ci_status === 'SUCCESS'
+              ? '<span class="text-emerald-400 font-mono text-[10px]">✓ CI</span>'
+              : (u.ci_status === 'FAILURE' ? '<span class="text-rose-400 font-mono text-[10px]">✗ CI</span>' : '<span class="text-amber-400 font-mono text-[10px]">⋯ CI</span>');
+            const chainHtml = (u.chain_preview || []).map((n, idx) =>
+              `<span onclick="openDrawer(${n})" class="cursor-pointer px-1.5 py-0.5 rounded font-mono text-[10px] ${idx === 0 ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-bold' : 'bg-dark-900 text-slate-300 border border-slate-700'}">#${n}</span>`
+            ).join('<span class="text-slate-600 text-[10px]">→</span>');
+            return `
+              <div class="bg-dark-950 border border-slate-800 hover:border-fuchsia-500/40 rounded-lg p-3 transition">
+                <div class="flex items-center justify-between gap-2 text-xs">
+                  <div class="flex items-center gap-1.5 font-mono">
+                    <span onclick="openDrawer(${u.number})" class="cursor-pointer font-bold text-emerald-400 hover:underline">#${u.number}</span>${ghLink(u.number)}
+                    <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30">⚡ Unblocks ${u.downstream_total_count} PR${u.downstream_total_count !== 1 ? 's' : ''}</span>
+                    ${ciTag}
+                  </div>
+                  <span class="text-[10px] px-1.5 py-0.5 rounded border font-mono ${statusClass(u.status)}">${esc(u.status)}</span>
+                </div>
+                <p onclick="openDrawer(${u.number})" class="cursor-pointer text-[11px] text-slate-200 font-medium mt-1.5 truncate hover:text-emerald-300">${esc(u.title)}</p>
+                <div class="mt-2 flex flex-wrap items-center justify-between gap-2">
+                  <div class="flex flex-wrap items-center gap-1">${chainHtml}${u.chain_length > 5 ? `<span class="text-[10px] text-slate-500 font-mono">+${u.chain_length - 5}</span>` : ''}</div>
+                  <div class="flex items-center gap-1.5 shrink-0">
+                    <button onclick="document.getElementById('searchInput').value='${u.number}'; handleSearch('${u.number}'); navClick(event, 'dag');" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-semibold border border-slate-700">Open DAG</button>
+                    <button onclick="navClick(event, 'simulator'); runSimulation(${u.number});" class="px-2 py-0.5 rounded bg-fuchsia-600/20 hover:bg-fuchsia-600/35 text-fuchsia-300 text-[10px] font-semibold border border-fuchsia-500/40">Simulate</button>
+                  </div>
+                </div>
+              </div>`;
+          }).join('')
+        : '<div class="text-xs text-slate-500 italic py-4 text-center">No open stacked PR chains detected.</div>';
+
+      // 4A. Highest Change-Risk Actionable PRs
+      const riskSplitEl = document.getElementById('overviewHighRiskSplit');
+      if (riskSplitEl) {
+        riskSplitEl.textContent = `High/Crit: ${highAct.toLocaleString()} actionable / ${highAll.toLocaleString()} all open`;
+        riskSplitEl.title = 'Actionable = PRs where the ball is on a reviewer or ready to merge (excludes drafts, failing CI, conflicts, and stack-blocked PRs).';
+      }
+      document.getElementById('overviewTopRisk').innerHTML = (d.top_risk_prs || []).map(p => {
+        const comp = p.risk_components;
+        const mathChip = comp
+          ? `<span class="text-[10px] font-mono text-cyan-300/90 bg-dark-900 border border-slate-800 px-1.5 py-0.5 rounded" title="Sensitivity ${comp.sensitivity} · Churn ${comp.churn} · Collisions ${comp.collision}">S:${comp.sensitivity.toFixed(2)} · C:${comp.churn.toFixed(2)} · X:${comp.collision.toFixed(2)}</span>`
+          : '';
         return `
-          <div>
+          <div onclick="openDrawer(${p.number})" class="cursor-pointer bg-dark-950 border border-slate-800 hover:border-slate-600 rounded-lg p-3 flex items-center justify-between gap-3">
+            <div class="min-w-0">
+              <div class="flex flex-wrap items-center gap-2 text-xs">
+                <span class="font-mono font-bold text-cyan-400">#${p.number}</span>${ghLink(p.number)}
+                ${riskBadge(p)}
+                ${mathChip}
+              </div>
+              <p class="text-xs text-slate-200 font-medium mt-1 truncate">${esc(p.title)}</p>
+            </div>
+            <div class="flex flex-wrap gap-1 justify-end shrink-0 max-w-xs">
+              ${(p.sensitive_areas || []).slice(0, 2).map(a => `<span class="px-1.5 py-0.5 rounded text-[10px] bg-rose-500/10 text-rose-300 border border-rose-500/20">${esc(a)}</span>`).join('')}
+            </div>
+          </div>`;
+      }).join('') || '<span class="text-xs text-slate-500 italic">No PRs indexed.</span>';
+
+      // 4B. Reconciled Triage Breakdown (ALL 8 statuses including STALE -> exact 100%)
+      const statusEntries = [
+        ['READY_TO_MERGE', 'Ready to Merge', 'bg-emerald-400', 'Approved + CI green/pending + non-conflicting + stack-unblocked + non-draft (includes mergeable: UNKNOWN)'],
+        ['WAITING_REVIEW', 'Waiting on Review (<14d)', 'bg-cyan-400', 'Healthy CI, non-conflicting, unblocked PRs updated within 14d awaiting review'],
+        ['STALE', 'Stale PR (≥14d idle, healthy CI)', 'bg-sky-600', 'Healthy CI, non-conflicting PRs with no activity for ≥14 days'],
+        ['BLOCKED_BY_DEP', 'Blocked by Stack', 'bg-fuchsia-400', 'Depends on an open upstream PR in a stack'],
+        ['CHANGES_REQUESTED', 'Waiting on Author (Feedback)', 'bg-amber-400', 'Reviewer requested changes or commented after author’s last push'],
+        ['CI_FAILURE', 'CI Failure (Author)', 'bg-rose-400', 'Latest commit status check rollup is FAILURE'],
+        ['CONFLICTING', 'Merge Conflict (Author)', 'bg-orange-400', 'GitHub mergeable state is CONFLICTING'],
+        ['DRAFT', 'Draft', 'bg-slate-500', 'Marked as draft / work in progress'],
+      ];
+      const triageSum = statusEntries.reduce((acc, [k]) => acc + (sb[k] || 0), 0);
+      const sumTag = document.getElementById('overviewTriageSumTag');
+      if (sumTag) sumTag.textContent = `${triageSum.toLocaleString()} / ${(d.total_open_prs || 0).toLocaleString()} (100%)`;
+
+      document.getElementById('overviewStatusBars').innerHTML = statusEntries.map(([key, label, barCls, tip]) => {
+        const cnt = sb[key] || 0;
+        const pct = ((cnt / total) * 100);
+        const pctDisp = cnt > 0 && pct < 1 ? '<1%' : `${Math.round(pct)}%`;
+        return `
+          <div title="${esc(tip)}">
             <div class="flex justify-between text-[11px] mb-1">
               <span class="text-slate-300">${label}</span>
-              <span class="font-mono text-slate-400">${cnt} (${pct}%)</span>
+              <span class="font-mono text-slate-400">${cnt.toLocaleString()} (${pctDisp})</span>
             </div>
-            <div class="h-1.5 rounded-full bg-dark-950 overflow-hidden"><div class="h-full ${barCls}" style="width:${pct}%"></div></div>
+            <div class="h-1.5 rounded-full bg-dark-950 overflow-hidden"><div class="h-full ${barCls}" style="width:${Math.min(100, pct).toFixed(1)}%"></div></div>
           </div>`;
       }).join('');
 
+      // 4C. Strictly Reconciled "Whose Move Is It?" (Exact partition summing to total_open_prs)
       document.getElementById('overviewWaitingBars').innerHTML = [
-        ['REVIEWER', 'On Reviewer', 'text-cyan-300 bg-cyan-500/10'],
-        ['AUTHOR', 'On Author', 'text-amber-300 bg-amber-500/10'],
-        ['MERGE', 'Ready Merge', 'text-emerald-300 bg-emerald-500/10'],
-        ['NONE', 'Draft', 'text-slate-400 bg-slate-800'],
-      ].map(([k, lbl, cls]) => `
-        <div class="rounded-lg p-2.5 ${cls} text-center">
-          <div class="text-base font-bold font-mono">${wb[k] || 0}</div>
-          <div class="text-[10px]">${lbl}</div>
+        {
+          k: 'REVIEWER',
+          lbl: 'On Reviewer',
+          sub: `${wd.reviewer_active} active + ${wd.reviewer_stale} stale PRs ≥14d`,
+          tip: 'Waiting on Review (<14d) + Stale PRs (≥14d) where ball is still on reviewer',
+          cls: 'text-cyan-300 bg-cyan-500/10 border border-cyan-500/20',
+        },
+        {
+          k: 'AUTHOR',
+          lbl: 'On Author',
+          sub: `${wd.author_ci_or_conflict} CI/conflict + ${wd.author_feedback} feedback`,
+          tip: 'CI failures + merge conflicts + changes requested / unaddressed review feedback',
+          cls: 'text-amber-300 bg-amber-500/10 border border-amber-500/20',
+        },
+        {
+          k: 'MERGE',
+          lbl: 'Ready to Merge',
+          sub: 'matches Triage exactly',
+          tip: 'Approved + CI green/pending + non-conflicting + stack-unblocked + non-draft (includes mergeable: UNKNOWN)',
+          cls: 'text-emerald-300 bg-emerald-500/10 border border-emerald-500/20',
+        },
+        {
+          k: 'NONE',
+          lbl: 'Draft / Stack',
+          sub: `${wd.draft} draft + ${wd.stack_blocked} stack`,
+          tip: 'Draft PRs + PRs blocked on open upstream stack dependencies',
+          cls: 'text-slate-300 bg-slate-800/80 border border-slate-700/60',
+        },
+      ].map(t => `
+        <div class="rounded-lg p-2.5 ${t.cls} text-center" title="${esc(t.tip)}">
+          <div class="text-base font-bold font-mono">${(wb[t.k] || 0).toLocaleString()}</div>
+          <div class="text-[11px] font-semibold">${t.lbl}</div>
+          <div class="text-[9px] opacity-80 font-mono mt-0.5">${esc(t.sub)}</div>
         </div>
       `).join('');
 
+      // 5A. Actionable Reviewer Queues (Primary = Actionable Now, Secondary = Raw Pending & Stale Requests >30d)
+      const covEl = document.getElementById('overviewReviewerCoverage');
+      const cov = d.reviewer_coverage;
+      if (covEl && cov) {
+        covEl.innerHTML = `Reconciles to <strong class="text-cyan-300">${(cov.on_reviewer_total || 0).toLocaleString()} On Reviewer</strong>: <strong class="text-slate-200">${(cov.with_individual_reviewer || 0).toLocaleString()}</strong> individual-assigned · <strong class="text-violet-300">${(cov.team_only_reviewer || 0).toLocaleString()}</strong> @team-only · <strong class="text-slate-300">${(cov.unassigned_reviewer || 0).toLocaleString()}</strong> unassigned <span class="text-slate-500">(multi-reviewer PRs count in each queue)</span>`;
+      }
+      document.getElementById('overviewReviewers').innerHTML = (d.top_reviewer_load || []).map(r => {
+        const act = r.actionable_pending ?? 0;
+        const actStale = r.actionable_stale_30d ?? 0;
+        const raw = r.pending_requests ?? 0;
+        const rawStale = r.stale_pending_30d ?? 0;
+        const oldest = (r.oldest_actionable_days || r.oldest_pending_days || 0).toFixed(0);
+        return `
+          <div onclick="selectReviewer('${esc(r.reviewer)}'); navClick(event, 'reviewers');" class="cursor-pointer bg-dark-950 border border-slate-800 hover:border-violet-500/40 rounded-lg p-3 flex flex-wrap items-center justify-between gap-2 transition">
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="font-mono text-xs font-bold text-violet-300 hover:underline">${esc(r.reviewer)}</span>
+                ${actStale > 0 ? `<span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30" title="Actionable review requests waiting >30 days">${actStale} overdue req (&gt;30d)</span>` : ''}
+              </div>
+              <div class="text-[10px] text-slate-500 font-mono mt-0.5">${raw.toLocaleString()} raw pending · ${rawStale.toLocaleString()} stale req (&gt;30d) · oldest ${oldest}d</div>
+            </div>
+            <span class="text-xs font-mono font-bold px-2.5 py-1 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">${act.toLocaleString()} actionable</span>
+          </div>`;
+      }).join('') || '<span class="text-xs text-slate-500 italic">No reviewer data yet.</span>';
+
+      // 5B. Hottest Contended Files
       document.getElementById('overviewHotspots').innerHTML = (d.top_hotspot_files || []).map(h => `
         <a href="${pageHref('collisions', { file: h.path })}"
            data-collision-file="${esc(h.path)}"
            class="overview-hotspot-link bg-dark-950 border border-slate-800 hover:border-slate-600 rounded-lg p-3 flex items-center justify-between gap-3 block">
           <span class="font-mono text-xs text-slate-200 truncate" title="${esc(h.path)}">${esc(h.path)}</span>
-          <span class="shrink-0 text-[11px] font-mono text-rose-400 font-semibold">${h.pr_count} PRs · ${h.churn} churn</span>
+          <span class="shrink-0 text-[11px] font-mono text-rose-400 font-semibold">${h.pr_count} PRs${h.active_prs_count ? ` (${h.active_prs_count} active)` : ''} · ${h.churn} churn</span>
         </a>
       `).join('');
       document.querySelectorAll('#overviewHotspots .overview-hotspot-link').forEach(link => {
@@ -1354,16 +1800,6 @@
           navClick(evt, 'collisions');
         });
       });
-
-      document.getElementById('overviewReviewers').innerHTML = (d.top_reviewer_load || []).map(r => `
-        <div class="bg-dark-950 border border-slate-800 rounded-lg p-3 flex items-center justify-between gap-3">
-          <div>
-            <span class="font-mono text-xs font-bold text-violet-300">${esc(r.reviewer)}</span>
-            <span class="text-[11px] text-slate-500 ml-2">${r.reviews_submitted} reviewed</span>
-          </div>
-          <span class="text-[11px] font-mono px-2 py-0.5 rounded bg-amber-500/15 text-amber-300">${r.pending_requests} pending · oldest ${r.oldest_pending_days.toFixed(0)}d</span>
-        </div>
-      `).join('') || '<span class="text-xs text-slate-500 italic">No reviewer data yet.</span>';
     }
 
     // PAGE 1: Dependency DAG
@@ -1787,9 +2223,14 @@
         lastInboxData = data;
 
         const s = data.summary || {};
+        const actCount = s.actionable_pending ?? (data.counts && data.counts.ready_decision) ?? 0;
+        const actStale = s.actionable_stale_30d ?? 0;
+        const rawStale = s.stale_pending_30d ?? 0;
+        const oldestAct = (s.oldest_actionable_days || s.oldest_pending_days || 0).toFixed(0);
         document.getElementById('inboxStatChips').innerHTML = `
-          <span class="px-2 py-0.5 rounded bg-dark-950 border border-slate-800 text-slate-300"><strong class="text-amber-300">${s.pending_requests ?? 0}</strong> pending requests</span>
-          <span class="px-2 py-0.5 rounded bg-dark-950 border border-slate-800 text-slate-300"><strong class="text-slate-200">${(s.oldest_pending_days ?? 0).toFixed(0)}d</strong> oldest wait</span>
+          <span class="px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-300"><strong class="text-emerald-200">${actCount}</strong> actionable now${actStale > 0 ? ` (${actStale} &gt;30d overdue)` : ''}</span>
+          <span class="px-2 py-0.5 rounded bg-dark-950 border border-slate-800 text-slate-300"><strong class="text-amber-300">${s.pending_requests ?? 0}</strong> raw pending · <strong class="text-slate-400">${rawStale}</strong> stale &gt;30d</span>
+          <span class="px-2 py-0.5 rounded bg-dark-950 border border-slate-800 text-slate-300"><strong class="text-slate-200">${oldestAct}d</strong> oldest wait</span>
           <span class="px-2 py-0.5 rounded bg-dark-950 border border-slate-800 text-slate-300"><strong class="text-emerald-400">${s.approvals ?? 0}</strong> approved · <strong class="text-rose-400">${s.changes_requested ?? 0}</strong> changes req</span>
         `;
 
@@ -1855,9 +2296,11 @@
           ? `<span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-fuchsia-500/15 text-fuchsia-300 border border-fuchsia-500/30">⚡ Blocks ${blocksCount} PR${blocksCount > 1 ? 's' : ''}</span>`
           : (pr.blocked_by && pr.blocked_by.length ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-amber-500/15 text-amber-300 border border-amber-500/20">Blocked</span>` : '<span class="text-slate-500 text-[10px]">Standalone</span>');
 
-        const idleStr = pr.staleness_days >= 14
-          ? `<span class="text-rose-300 font-mono text-[10px]">${pr.staleness_days.toFixed(0)}d idle</span>`
-          : `<span class="text-emerald-400 font-mono text-[10px]">⚡ ${pr.staleness_days.toFixed(0)}d active</span>`;
+        const idleStr = pr.staleness_days >= 30
+          ? `<span class="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 font-mono text-[10px]">⏰ ${pr.staleness_days.toFixed(0)}d overdue</span>`
+          : (pr.staleness_days >= 14
+            ? `<span class="text-rose-300 font-mono text-[10px]">${pr.staleness_days.toFixed(0)}d stale</span>`
+            : `<span class="text-emerald-400 font-mono text-[10px]">⚡ ${pr.staleness_days.toFixed(0)}d active</span>`);
 
         const filesUrl = pr.url ? `${pr.url}/files` : `https://github.com/vllm-project/vllm/pull/${pr.number}/files`;
 
@@ -1905,7 +2348,13 @@
 
     async function fetchReviewers() {
       try {
-        const res = await apiFetch('/reviewers', { limit: 100, search: searchQuery || null });
+        const incTeamsEl = document.getElementById('includeTeamsToggle');
+        const includeTeams = incTeamsEl ? incTeamsEl.checked : false;
+        const res = await apiFetch('/reviewers', {
+          limit: 100,
+          search: searchQuery || null,
+          include_teams: includeTeams ? 'true' : 'false',
+        });
         const rows = await res.json();
         document.getElementById('colCountReviewers').textContent = rows.length;
         if (lastOverview) {
@@ -1915,29 +2364,40 @@
         }
 
         const queryHandle = selectedReviewer || (searchQuery && rows.some(r => r.reviewer.toLowerCase() === searchQuery.toLowerCase()) ? searchQuery : '');
-        console.log('[DEBUG reviewers] selectedReviewer:', selectedReviewer, 'searchQuery:', searchQuery, 'queryHandle:', queryHandle, 'rowsCount:', rows.length);
         if (queryHandle) {
           await selectReviewer(queryHandle);
         }
 
         const tbody = document.getElementById('reviewerTableBody');
         if (!rows.length) {
-          tbody.innerHTML = '<tr><td colspan="7" class="py-6 text-center text-slate-500 italic font-sans">No review data matches. Sync GitHub to load review requests.</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="8" class="py-6 text-center text-slate-500 italic font-sans">No review data matches. Sync GitHub to load review requests.</td></tr>';
           return;
         }
 
         tbody.innerHTML = rows.map(r => {
           const isSelected = selectedReviewer && selectedReviewer.toLowerCase() === r.reviewer.toLowerCase();
+          const isTeam = Boolean(r.is_team || (r.reviewer || '').startsWith('@team/'));
+          const act = r.actionable_pending ?? 0;
+          const actStale = r.actionable_stale_30d ?? 0;
+          const raw = r.pending_requests ?? 0;
+          const rawStale = r.stale_pending_30d ?? 0;
+          const oldestAct = r.oldest_actionable_days || r.oldest_pending_days || 0;
           return `
             <tr data-reviewer-name="${esc(r.reviewer)}" class="hover:bg-dark-850/60 transition cursor-pointer ${isSelected ? 'bg-violet-500/10 ring-1 ring-violet-500/40' : ''}" onclick="selectReviewer('${esc(r.reviewer)}')">
               <td class="py-2.5 px-3 font-mono font-bold text-violet-300 whitespace-nowrap">
                 <div class="flex items-center gap-1.5">
                   <span class="hover:underline">${esc(r.reviewer)}</span>
-                  ${ghUserLink(r.reviewer)}
+                  ${isTeam ? '<span class="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700 font-sans uppercase">team</span>' : ghUserLink(r.reviewer)}
                 </div>
               </td>
-              <td class="py-2.5 px-3 text-right font-mono font-bold ${r.pending_requests > 0 ? 'text-amber-300' : 'text-slate-500'}">${r.pending_requests}</td>
-              <td class="py-2.5 px-3 text-right font-mono text-slate-300">${r.oldest_pending_days > 0 ? `${r.oldest_pending_days.toFixed(0)}d` : '—'}</td>
+              <td class="py-2.5 px-3 text-right font-mono whitespace-nowrap">
+                <span class="font-bold ${act > 0 ? 'text-emerald-300' : 'text-slate-500'}">${act}</span>
+                ${actStale > 0 ? `<span class="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">${actStale} &gt;30d</span>` : ''}
+              </td>
+              <td class="py-2.5 px-3 text-right font-mono text-slate-400 whitespace-nowrap">
+                ${raw} <span class="text-[10px] text-slate-500">(${rawStale} &gt;30d)</span>
+              </td>
+              <td class="py-2.5 px-3 text-right font-mono text-slate-300">${oldestAct > 0 ? `${oldestAct.toFixed(0)}d` : '—'}</td>
               <td class="py-2.5 px-3 text-right font-mono text-slate-300">${r.reviews_submitted}</td>
               <td class="py-2.5 px-3 text-right font-mono text-emerald-400">${r.approvals}</td>
               <td class="py-2.5 px-3 text-right font-mono text-rose-400">${r.changes_requested}</td>
@@ -2074,6 +2534,16 @@
         const riskBadgeEl = document.getElementById('drawerRiskBadge');
         riskBadgeEl.textContent = `${dossier.risk_score} ${dossier.risk_level}`;
         riskBadgeEl.className = `text-xs px-2 py-0.5 rounded font-bold font-mono ${riskClass(dossier.risk_level)}`;
+        const rc = dossier.risk_components;
+        const mathEl = document.getElementById('drawerRiskMath');
+        if (mathEl) {
+          if (rc) {
+            mathEl.textContent = `100 × (0.50×${rc.sensitivity.toFixed(2)} + 0.20×${rc.churn.toFixed(2)} + 0.30×${rc.collision.toFixed(2)}) = ${dossier.risk_score} ${dossier.risk_level}`;
+            mathEl.classList.remove('hidden');
+          } else {
+            mathEl.classList.add('hidden');
+          }
+        }
         document.getElementById('drawerRiskAreas').innerHTML = (dossier.sensitive_areas || []).map(a =>
           `<span class="px-1.5 py-0.5 rounded text-[10px] bg-rose-500/10 text-rose-300 border border-rose-500/20">${esc(a)}</span>`
         ).join('');

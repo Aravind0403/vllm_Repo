@@ -73,6 +73,7 @@ class PullRequest(BaseModel):
 
     # Review-flow signals (empty/None when loaded from an older cache)
     requested_reviewers: List[str] = Field(default_factory=list)
+    requested_teams: List[str] = Field(default_factory=list)
     reviews: List[ReviewEvent] = Field(default_factory=list)
     last_commit_at: Optional[datetime] = None
     last_comment_at: Optional[datetime] = None
@@ -133,11 +134,12 @@ class RiskScore(BaseModel):
 
 class ReviewFlow(BaseModel):
     """Where the PR sits in the review loop and for how long."""
-    waiting_on: str = "REVIEWER"           # REVIEWER, AUTHOR, NONE
+    waiting_on: str = "REVIEWER"           # REVIEWER, AUTHOR, MERGE, NONE
     waiting_days: float = 0.0              # days since the ball last changed hands
     review_count: int = 0
     reviewers_engaged: List[str] = Field(default_factory=list)
     requested_reviewers: List[str] = Field(default_factory=list)
+    requested_teams: List[str] = Field(default_factory=list)
     last_review_at: Optional[datetime] = None
     last_reviewer: Optional[str] = None
     last_review_state: Optional[str] = None
@@ -148,11 +150,17 @@ class ReviewFlow(BaseModel):
 class ReviewerLoad(BaseModel):
     """Per-reviewer workload across all open PRs."""
     reviewer: str
-    pending_requests: int = 0      # requested, not yet reviewed
+    is_team: bool = False
+    actionable_pending: int = 0    # non-draft, CI green/pending, non-conflicting, stack-unblocked, ball on reviewer (incl. overdue)
+    actionable_stale_30d: int = 0  # subset of actionable_pending waiting/idle >= 30 days
+    pending_requests: int = 0      # raw GitHub reviewRequests count (incl. drafts, failing CI, conflicts, stale)
+    stale_pending_30d: int = 0     # subset of pending_requests idle >= 30 days
     reviews_submitted: int = 0     # distinct PRs this reviewer has reviewed
     approvals: int = 0
     changes_requested: int = 0
+    actionable_pr_numbers: List[int] = Field(default_factory=list)
     pending_pr_numbers: List[int] = Field(default_factory=list)
+    oldest_actionable_days: float = 0.0
     oldest_pending_days: float = 0.0
 
 

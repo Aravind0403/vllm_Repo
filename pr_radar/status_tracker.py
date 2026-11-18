@@ -66,15 +66,17 @@ class StatusTracker:
             primary_reason = "Reviewer requested changes"
 
         elif pr.review_decision == "APPROVED":
-            if pr.ci_status == "SUCCESS" and pr.mergeable == "MERGEABLE":
+            if pr.ci_status in ("SUCCESS", "PENDING"):
                 status = TriageStatus.READY_TO_MERGE
-                primary_reason = "Approved, CI green, mergeable"
-            elif pr.ci_status == "PENDING":
-                status = TriageStatus.READY_TO_MERGE
-                primary_reason = "Approved, waiting for CI completion"
+                if pr.ci_status == "PENDING":
+                    primary_reason = "Approved, waiting for CI completion"
+                elif pr.mergeable == "UNKNOWN":
+                    primary_reason = "Approved, CI green (mergeability check pending)"
+                else:
+                    primary_reason = "Approved, CI green, mergeable"
             else:
                 status = TriageStatus.WAITING_FOR_REVIEW
-                primary_reason = "Approved with pending requirements"
+                primary_reason = "Approved, CI check status unknown"
 
         elif staleness_days >= cls.STALE_THRESHOLD_DAYS:
             status = TriageStatus.STALE

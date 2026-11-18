@@ -85,5 +85,46 @@ def test_reviewer_load_aggregation():
     assert loads["bob"].reviews_submitted == 1 and loads["bob"].changes_requested == 1
     assert loads["carol"].pending_requests == 1
     assert loads["dave"].approvals == 1 and loads["dave"].pending_requests == 0
-    # Sorted by pending first
+    # Sorted by actionable_pending, then pending first
     assert compute_reviewer_load(prs, flows)[0].reviewer == "bob"
+
+
+def test_ci_failure_and_conflict_wait_on_author_and_unknown_mergeable_still_ready():
+    pr_ci = create_sample_pr(10, ci_status="FAILURE", updated_at=NOW)
+    assert analyze_review_flow(pr_ci, NOW).waiting_on == "AUTHOR"
+
+    pr_conf = create_sample_pr(11, mergeable="CONFLICTING", updated_at=NOW)
+    assert analyze_review_flow(pr_conf, NOW).waiting_on == "AUTHOR"
+
+    pr_blocked = create_sample_pr(12, updated_at=NOW)
+    assert analyze_review_flow(pr_blocked, NOW, blocked_by=[99]).waiting_on == "NONE"
+
+    pr_unknown_mergeable = create_sample_pr(
+        13, review_decision="APPROVED", ci_status="SUCCESS", mergeable="UNKNOWN",
+        reviews=[_rev("carol", "APPROVED", 1)], updated_at=NOW,
+    )
+    assert analyze_review_flow(pr_unknown_mergeable, NOW).waiting_on == "MERGE"
+
+
+def test_reviewer_load_separates_actionable_stale_and_teams():
+    pr_ok = create_sample_pr(20, requested_reviewers=["alice_rev"], updated_at=NOW - timedelta(days=2))
+    pr_overdue = create_sample_pr(21, requested_reviewers=["alice_rev"], updated_at=NOW - timedelta(days=45))
+    pr_ci_fail = create_sample_pr(22, requested_reviewers=["alice_rev"], ci_status="FAILURE", updated_at=NOW - timedelta(days=40))
+    pr_draft = create_sample_pr(23, requested_reviewers=["alice_rev"], is_draft=True, updated_at=NOW - timedelta(days=5))
+    pr_team = create_sample_pr(24, updated_at=NOW - timedelta(days=1))
+    pr_team.requested_teams = ["vllm-core"]
+
+    prs = [pr_ok, pr_overdue, pr_ci_fail, pr_draft, pr_team]
+    flows = {p.number: analyze_review_flow(p, NOW) for p in prs}
+    loads = {rl.reviewer: rl for rl in compute_reviewer_load(prs, flows, now=NOW)}
+
+    alice = loads["alice_rev"]
+    assert alice.is_team is False
+    assert alice.pending_requests == 4
+    assert alice.actionable_pending == 2          # pr_ok + pr_overdue (overdue stays actionable!)
+    assert alice.actionable_stale_30d == 1        # pr_overdue badged as >30d overdue
+    assert alice.stale_pending_30d == 2           # pr_overdue + pr_ci_fail
+
+    team = loads["@team/vllm-core"]
+    assert team.is_team is True
+    assert team.actionable_pending == 1
