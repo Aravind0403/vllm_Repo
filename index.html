@@ -1,0 +1,2704 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PR Radar — PR Dependency, Collision &amp; Triage Engine</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              500: '#10b981',
+              600: '#059669',
+            },
+            dark: {
+              800: '#1e222d',
+              850: '#151821',
+              900: '#0f1117',
+              950: '#090a0f',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <style>
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0f1117; }
+    ::-webkit-scrollbar-thumb { background: #272d3b; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #3b4252; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  </style>
+<script>window.PR_RADAR_STATIC = true;</script>
+</head>
+<body class="bg-dark-950 text-slate-200 h-screen flex flex-col font-sans antialiased overflow-hidden">
+
+  <!-- Row 1: Brand, Repo Selector, Sync & Global Metrics -->
+  <header class="min-h-14 py-2 border-b border-slate-800 bg-dark-900 px-5 flex items-center justify-between gap-4 shrink-0 z-20">
+    <div class="flex items-center gap-3 min-w-0">
+      <a href="/overview" onclick="return navClick(event, 'overview')" class="flex items-center gap-2 shrink-0">
+        <span class="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold">
+          <i class="ph-bold ph-git-merge text-lg"></i>
+        </span>
+        <span class="font-bold text-white text-base tracking-tight">PR Radar</span>
+      </a>
+      <span id="repoEngineBadge" class="hidden sm:inline-block text-[11px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono shrink-0">Engine</span>
+
+      <div class="h-4 w-px bg-slate-800 hidden sm:block"></div>
+
+      <div class="flex items-center gap-1.5 bg-dark-850 border border-slate-700/60 rounded-md px-2 py-1 font-mono text-xs text-slate-200">
+        <i class="ph ph-github-logo text-sm text-slate-400"></i>
+        <select id="repoSelect" onchange="switchRepo(this.value)" class="bg-transparent text-slate-200 focus:outline-none cursor-pointer pr-1">
+          <option value="vllm-project/vllm" class="bg-dark-900">vllm-project/vllm</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Global Stats & Actions -->
+    <div class="flex items-center gap-3 text-xs font-medium text-slate-400 shrink-0">
+      <div class="hidden md:flex items-center gap-3 mr-1">
+        <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-400"></span>Open PRs: <strong id="statTotalPrs" class="text-white">...</strong></span>
+        <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-fuchsia-400"></span>Stacks: <strong id="statStacks" class="text-white">...</strong></span>
+        <span class="flex items-center gap-1.5 cursor-pointer hover:text-slate-200 transition" onclick="openRiskFormulaModal()" title="Click to inspect the published risk scoring formula">
+          <span class="w-2 h-2 rounded-full bg-rose-400"></span>High risk: <strong id="statHighRisk" class="text-white">...</strong>
+        </span>
+      </div>
+      <div class="hidden lg:flex items-center gap-1.5 text-[11px] text-slate-500 font-mono" title="Last GitHub sync">
+        <i class="ph ph-clock text-sm"></i>
+        <span id="statSynced">...</span>
+      </div>
+      <button onclick="triggerSync()" id="syncBtn" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs transition border border-slate-700">
+        <i class="ph ph-arrows-clockwise text-sm" id="syncIcon"></i>
+        <span>Sync</span>
+      </button>
+      <a id="apiDocsLink" href="/docs" target="_blank" rel="noopener" class="hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-dark-850 hover:bg-slate-800 text-slate-400 hover:text-slate-200 text-xs border border-slate-800 transition" title="OpenAPI Docs">
+        <i class="ph ph-code text-sm"></i>
+        <span id="apiDocsLabel">API</span>
+      </a>
+    </div>
+  </header>
+
+  <!-- Row 2: Dedicated Page Navigation + Subsystem / Search Toolbar -->
+  <nav class="border-b border-slate-800 bg-dark-900/70 px-5 flex flex-wrap items-center justify-between gap-3 py-2 shrink-0 z-10">
+    <div class="flex items-center gap-1 bg-dark-950 p-1 rounded-lg border border-slate-800 overflow-x-auto no-scrollbar" id="pageNav">
+      <a href="/overview" data-page="overview" onclick="return navClick(event, 'overview')" class="nav-link flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-slate-400 hover:text-white transition whitespace-nowrap">
+        <i class="ph-bold ph-gauge text-sm text-emerald-400"></i>Overview
+      </a>
+      <a href="/dag" data-page="dag" onclick="return navClick(event, 'dag')" class="nav-link flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-slate-400 hover:text-white transition whitespace-nowrap">
+        <i class="ph-bold ph-tree-structure text-sm text-emerald-400"></i>Dependency DAG
+      </a>
+      <a href="/collisions" data-page="collisions" onclick="return navClick(event, 'collisions')" class="nav-link flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-slate-400 hover:text-white transition whitespace-nowrap">
+        <i class="ph-bold ph-fire text-sm text-amber-400"></i>Collisions &amp; Hotspots
+      </a>
+      <a href="/triage" data-page="triage" onclick="return navClick(event, 'triage')" class="nav-link flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-slate-400 hover:text-white transition whitespace-nowrap">
+        <i class="ph-bold ph-kanban text-sm text-cyan-400"></i>Triage Board
+      </a>
+      <a href="/reviewers" data-page="reviewers" onclick="return navClick(event, 'reviewers')" class="nav-link flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-slate-400 hover:text-white transition whitespace-nowrap">
+        <i class="ph-bold ph-users text-sm text-violet-400"></i>Reviewer Load
+      </a>
+      <a href="/simulator" data-page="simulator" onclick="return navClick(event, 'simulator')" class="nav-link flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-slate-400 hover:text-white transition whitespace-nowrap">
+        <i class="ph-bold ph-lightning text-sm text-fuchsia-400"></i>Merge Simulator
+      </a>
+    </div>
+
+    <!-- Search box -->
+    <div class="relative w-full sm:w-72 shrink-0">
+      <i class="ph ph-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500"></i>
+      <input id="searchInput" type="text" placeholder="Filter by PR #, title, author, file..."
+        oninput="handleSearch(this.value)"
+        class="w-full bg-dark-950 border border-slate-700/80 rounded-md pl-8 pr-7 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition">
+      <button id="clearSearchBtn" onclick="clearSearch()" class="hidden absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white text-xs">
+        <i class="ph ph-x"></i>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Row 3: Subsystem Filter Bar (hidden on Overview/Reviewers/Simulator where not applicable) -->
+  <div id="subsystemToolbar" class="h-10 border-b border-slate-800/80 bg-dark-850 px-5 flex items-center justify-between shrink-0 text-xs z-10">
+    <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 w-full" id="subsystemFilterBar">
+      <span class="text-slate-500 font-semibold uppercase text-[10px] tracking-wider shrink-0 mr-1">Subsystems:</span>
+      <button onclick="setSubsystemFilter('ALL', this)" class="subsystem-pill px-2.5 py-0.5 rounded-full font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 transition shrink-0">All</button>
+    </div>
+  </div>
+
+  <!-- Workspace Pages -->
+  <main class="flex-1 relative overflow-hidden flex h-full">
+
+    <!-- PAGE 0: Overview -->
+    <section id="pageOverview" class="page-view hidden w-full h-full overflow-y-auto p-6">
+      <div class="max-w-7xl mx-auto space-y-6">
+
+        <!-- 1. Post-Fix Triage Insight Banner + Repo Pulse & 90-Day Sparkline -->
+        <div id="overviewInsightBanner" class="bg-gradient-to-r from-dark-900 via-dark-900 to-slate-900/90 border border-emerald-500/30 rounded-xl p-5 shadow-lg">
+          <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+            <div class="space-y-1.5 min-w-0">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono">Reconciled Triage Pulse</span>
+                <span id="overviewFreshnessTag" class="text-[11px] text-slate-400 font-mono">Updated hourly via GitHub GraphQL</span>
+              </div>
+              <p id="overviewInsightHeadline" class="text-sm text-slate-200 leading-relaxed">Loading reconciled triage summary...</p>
+              <div id="overviewInsightSub" class="flex flex-wrap items-center gap-2 text-[11px] text-slate-400 font-mono"></div>
+            </div>
+            <div id="overviewPulseWidget" class="shrink-0 bg-dark-950/90 border border-slate-800 rounded-lg p-3 min-w-[270px]">
+              <div class="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-1">90-Day PR Throughput</div>
+              <div class="text-xs text-slate-500 italic">Loading pulse...</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. 4 Reconciled KPI Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" id="overviewKpis"></div>
+
+        <!-- 3. Differentiators Front & Center: Live Merge Races + Foundational Stack Unblockers -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <!-- Middle-Left: Top Live Merge Races -->
+          <div class="bg-dark-900 border border-amber-500/30 rounded-xl p-5 shadow-lg">
+            <div class="flex items-center justify-between gap-2 mb-3">
+              <div>
+                <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                  <i class="ph-bold ph-warning-diamond text-amber-400"></i> Top Live Merge Races
+                  <span class="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-300 border border-rose-500/30 font-mono">&lt;5d active</span>
+                </h2>
+                <p class="text-xs text-slate-400 mt-0.5">Concurrent PR pairs actively modifying overlapping files right now</p>
+              </div>
+              <a href="/collisions" onclick="return navClick(event, 'collisions')" class="text-xs text-amber-400 hover:underline font-medium shrink-0">Collision Radar →</a>
+            </div>
+            <div id="overviewLiveCollisions" class="space-y-2.5"></div>
+          </div>
+
+          <!-- Middle-Right: Foundational Stack Unblockers -->
+          <div class="bg-dark-900 border border-fuchsia-500/30 rounded-xl p-5 shadow-lg">
+            <div class="flex items-center justify-between gap-2 mb-3">
+              <div>
+                <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                  <i class="ph-bold ph-tree-structure text-fuchsia-400"></i> Foundational Stack Unblockers
+                </h2>
+                <p class="text-xs text-slate-400 mt-0.5">Base PRs whose merge unblocks the largest downstream dependency chains</p>
+              </div>
+              <a href="/dag" onclick="return navClick(event, 'dag')" class="text-xs text-fuchsia-400 hover:underline font-medium shrink-0">Dependency DAG →</a>
+            </div>
+            <div id="overviewStackUnblockers" class="space-y-2.5"></div>
+          </div>
+        </div>
+
+        <!-- 4. Auditable Change Risk + Reconciled Triage & Whose Move -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <!-- Highest Risk PRs (Actionable First) -->
+          <div class="lg:col-span-2 bg-dark-900 border border-slate-800 rounded-xl p-5">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+              <div>
+                <div class="flex flex-wrap items-center gap-2">
+                  <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                    <i class="ph-bold ph-warning text-rose-400"></i> Highest Change-Risk Actionable PRs
+                  </h2>
+                  <button onclick="openRiskFormulaModal()" class="text-[11px] px-2 py-0.5 rounded-full bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 font-mono transition inline-flex items-center gap-1" title="Inspect weights, thresholds, and full path sensitivity table">
+                    <i class="ph-bold ph-question"></i> Formula
+                  </button>
+                  <span id="overviewHighRiskSplit" class="text-[11px] px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-300 border border-rose-500/20 font-mono"></span>
+                </div>
+                <p class="text-xs text-slate-400 mt-1 font-mono">100 × (0.50·Sensitivity + 0.20·Churn + 0.30·LiveCollisions) · thresholds 80/60/30</p>
+              </div>
+              <a href="/triage" onclick="return navClick(event, 'triage')" class="text-xs text-emerald-400 hover:underline font-medium">Open Triage Board →</a>
+            </div>
+            <div id="overviewTopRisk" class="space-y-2.5"></div>
+          </div>
+
+          <!-- Status & Review-Loop Breakdown (Strictly Reconciled) -->
+          <div class="bg-dark-900 border border-slate-800 rounded-xl p-5 space-y-5">
+            <div>
+              <div class="flex items-center justify-between">
+                <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                  <i class="ph-bold ph-chart-bar text-cyan-400"></i> Triage Breakdown
+                </h2>
+                <span id="overviewTriageSumTag" class="text-[10px] font-mono text-slate-500">100%</span>
+              </div>
+              <div id="overviewStatusBars" class="mt-3 space-y-2"></div>
+            </div>
+            <div class="border-t border-slate-800 pt-4">
+              <div class="flex items-center justify-between">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">Whose Move Is It?</h3>
+                <span class="text-[10px] font-mono text-emerald-400/80" title="CI failures and merge conflicts belong to the author (PR hygiene); Ready to Merge matches Triage exactly.">Reconciled ✓</span>
+              </div>
+              <div id="overviewWaitingBars" class="mt-2.5 grid grid-cols-2 gap-2"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 5. Actionable Reviewer Queues + Hottest Contended Files -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <!-- Top Actionable Reviewers -->
+          <div class="bg-dark-900 border border-slate-800 rounded-xl p-5">
+            <div class="flex items-center justify-between gap-2 mb-3">
+              <div>
+                <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                  <i class="ph-bold ph-users text-violet-400"></i> Busiest Actionable Reviewer Queues
+                  <span class="text-slate-400 hover:text-white cursor-help" title="Actionable = non-draft, CI green/pending, non-conflicting, stack-unblocked PRs where the ball is on the reviewer (overdue review requests >30d included &amp; badged). Raw pending = all open GitHub reviewRequests (incl. CODEOWNERS auto-assignments, drafts &amp; failing CI). Team requests (@team/...) are separated.">
+                    <i class="ph-bold ph-info text-sm"></i>
+                  </span>
+                </h2>
+                <p class="text-[11px] text-slate-400 mt-0.5">Individual maintainers ranked by <strong class="text-emerald-300">Actionable Now</strong> (raw requests &amp; stale review requests &gt;30d alongside)</p>
+              </div>
+              <a href="/reviewers" onclick="return navClick(event, 'reviewers')" class="text-xs text-violet-400 hover:underline font-medium shrink-0">Full Table →</a>
+            </div>
+            <div id="overviewReviewerCoverage" class="mb-3 px-2.5 py-1.5 rounded-lg bg-dark-950 border border-slate-800/80 text-[10px] font-mono text-slate-400"></div>
+            <div id="overviewReviewers" class="space-y-2"></div>
+          </div>
+
+          <!-- Top Hotspots Summary -->
+          <div class="bg-dark-900 border border-slate-800 rounded-xl p-5">
+            <div class="flex items-center justify-between gap-2 mb-3">
+              <div>
+                <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                  <i class="ph-fill ph-fire text-rose-500"></i> Hottest Contended Files
+                </h2>
+                <p class="text-[11px] text-slate-400 mt-0.5">Click any file to filter pairwise collisions to that exact path</p>
+              </div>
+              <a href="/collisions" onclick="return navClick(event, 'collisions')" class="text-xs text-amber-400 hover:underline font-medium shrink-0">Inspect Collisions →</a>
+            </div>
+            <div id="overviewHotspots" class="space-y-2"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PAGE 1: Dependency DAG -->
+    <section id="pageDag" class="page-view hidden w-full h-full flex flex-col p-5 overflow-hidden">
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-4 shrink-0">
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="flex items-center gap-1.5 bg-dark-900 border border-slate-800 p-1 rounded-lg text-xs">
+            <span class="text-slate-400 font-semibold px-2">Scope:</span>
+            <button id="scopeStacksBtn" onclick="setDagScope('stacks')" class="px-2.5 py-1 rounded font-semibold bg-emerald-500 text-white transition">
+              Stacks Only (<span id="dagStacksCount">...</span>)
+            </button>
+            <button id="scopeAllBtn" onclick="setDagScope('all')" class="px-2.5 py-1 rounded font-semibold bg-slate-800 text-slate-400 hover:text-white transition">
+              All Open PRs
+            </button>
+          </div>
+
+          <div class="flex items-center gap-1.5 bg-dark-900 border border-slate-800 p-1 rounded-lg text-xs">
+            <span class="text-slate-400 font-semibold px-2">Sort:</span>
+            <select id="dagSortSelect" onchange="if (lastDagData) renderDag(lastDagData)" class="bg-dark-900 text-slate-200 px-2 py-1 rounded focus:outline-none cursor-pointer">
+              <option value="length">Longest stack first</option>
+              <option value="ready">Ready-to-merge base first</option>
+              <option value="risk">Highest risk first</option>
+              <option value="cycles">Cycles first</option>
+            </select>
+          </div>
+
+          <label class="flex items-center gap-1.5 bg-dark-900 border border-slate-800 px-3 py-1.5 rounded-lg text-xs text-slate-300 cursor-pointer">
+            <input type="checkbox" id="dagCyclesOnly" onchange="if (lastDagData) renderDag(lastDagData)" class="accent-rose-500">
+            <span>Cycles only</span>
+          </label>
+        </div>
+
+        <div class="flex items-center gap-2 bg-dark-900/90 border border-slate-800 px-3 py-1.5 rounded-lg text-xs text-slate-300">
+          <i class="ph ph-info text-emerald-400 text-sm"></i>
+          <span>Merge <strong class="text-emerald-300">top-down</strong>: card #1 is the unblocked base; cards below depend on it.</span>
+        </div>
+      </div>
+
+      <div class="flex-1 bg-dark-900/40 border border-slate-800 rounded-xl overflow-y-auto p-5" id="dagContainer">
+        <span class="text-slate-500 text-xs italic">Loading dependency stacks...</span>
+      </div>
+    </section>
+
+    <!-- PAGE 2: Collisions & Hotspots (Uncramped Layout) -->
+    <section id="pageCollisions" class="page-view hidden w-full h-full overflow-y-auto p-6">
+      <div class="max-w-7xl mx-auto space-y-6">
+
+        <!-- Conflict Hotspot Files -->
+        <div class="bg-dark-900 border border-slate-800 rounded-xl p-5 shadow-lg">
+          <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div>
+              <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                <i class="ph-fill ph-fire text-rose-500 text-base"></i>
+                Top Conflict Hotspot Files
+                <span id="hotspotsCountBadge" class="text-xs px-2 py-0.5 rounded-full bg-dark-850 text-slate-300 font-mono border border-slate-700">0</span>
+              </h2>
+              <p class="text-xs text-slate-400 mt-0.5">Click any hotspot card to filter the Pairwise Collision table below to that exact file</p>
+            </div>
+            <button id="toggleMoreHotspotsBtn" onclick="toggleShowAllHotspots()" class="hidden text-xs px-3 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition">
+              Show all 15 hotspots
+            </button>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4" id="hotspotContainer"></div>
+        </div>
+
+        <!-- Pairwise Collisions -->
+        <div class="bg-dark-900 border border-slate-800 rounded-xl p-5 shadow-lg">
+          <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div>
+              <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                <i class="ph-bold ph-warning-diamond text-amber-400 text-base"></i>
+                Pairwise PR Collision Radar
+                <span id="collisionsCountBadge" class="text-xs px-2 py-0.5 rounded-full bg-dark-850 text-slate-300 font-mono border border-slate-700">0</span>
+              </h2>
+              <p class="text-xs text-slate-400 mt-0.5">Detects <strong class="text-rose-400">Live Merge Races</strong> (&lt;5d idle on both PRs) vs <strong class="text-slate-400">Stale Overlaps</strong></p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2 text-xs">
+              <span id="activeFileFilterPill" class="hidden items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono">
+                <span id="activeFileFilterLabel"></span>
+                <button onclick="clearCollisionFileFilter()" class="hover:text-white"><i class="ph ph-x"></i></button>
+              </span>
+              <label class="flex items-center gap-1.5 bg-dark-850 border border-slate-700 px-2.5 py-1 rounded-md text-slate-300 cursor-pointer">
+                <input type="checkbox" id="liveOnlyToggle" onchange="fetchCollisions()" class="accent-rose-500">
+                <span>Live races only</span>
+              </label>
+              <select id="minRiskCollisionSelect" onchange="fetchCollisions()" class="bg-dark-850 border border-slate-700 rounded-md px-2.5 py-1 text-slate-200 focus:outline-none">
+                <option value="">All risk levels</option>
+                <option value="CRITICAL">CRITICAL only</option>
+                <option value="HIGH">HIGH only</option>
+                <option value="MEDIUM">MEDIUM only</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr class="border-b border-slate-800 text-slate-400 uppercase text-[10px] tracking-wider">
+                  <th class="py-2.5 px-3">PR A</th>
+                  <th class="py-2.5 px-3">PR B</th>
+                  <th class="py-2.5 px-3">Dynamics</th>
+                  <th class="py-2.5 px-3">Risk</th>
+                  <th class="py-2.5 px-3">Score</th>
+                  <th class="py-2.5 px-3">Shared Churn</th>
+                  <th class="py-2.5 px-3">Overlapping Files</th>
+                </tr>
+              </thead>
+              <tbody id="collisionTableBody" class="divide-y divide-slate-800/60 font-mono"></tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- PAGE 3: Release Triage Kanban -->
+    <section id="pageTriage" class="page-view hidden w-full h-full flex flex-col p-5 overflow-hidden">
+      <div class="flex items-center justify-between mb-3 shrink-0 text-xs">
+        <div class="text-slate-400">
+          Showing up to <strong class="text-slate-200">60 PRs per column</strong>, sorted highest risk first.
+        </div>
+        <button id="triageCompactBtn" onclick="toggleTriageCompact()" class="px-2.5 py-1 rounded bg-dark-900 border border-slate-800 hover:border-slate-700 text-slate-300 transition">
+          Compact cards: Off
+        </button>
+      </div>
+      <div class="flex-1 overflow-x-auto flex gap-4 pb-2">
+        <!-- Col 1 -->
+        <div class="w-80 shrink-0 flex flex-col bg-dark-900 border border-slate-800 rounded-xl overflow-hidden">
+          <div class="p-3 border-b border-slate-800 bg-emerald-500/5 flex items-center justify-between">
+            <span class="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span> Ready to Merge
+            </span>
+            <span id="colCountReady" class="text-xs px-2 py-0.5 rounded-full bg-dark-850 text-emerald-400 font-bold border border-emerald-500/30">0</span>
+          </div>
+          <div id="colReadyList" class="p-3 flex-1 overflow-y-auto space-y-2.5"></div>
+        </div>
+        <!-- Col 2 -->
+        <div class="w-80 shrink-0 flex flex-col bg-dark-900 border border-slate-800 rounded-xl overflow-hidden">
+          <div class="p-3 border-b border-slate-800 bg-fuchsia-500/5 flex items-center justify-between">
+            <span class="text-xs font-bold text-fuchsia-400 flex items-center gap-1.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-fuchsia-400"></span> Blocked on Stack PR
+            </span>
+            <span id="colCountBlocked" class="text-xs px-2 py-0.5 rounded-full bg-dark-850 text-fuchsia-400 font-bold border border-fuchsia-500/30">0</span>
+          </div>
+          <div id="colBlockedList" class="p-3 flex-1 overflow-y-auto space-y-2.5"></div>
+        </div>
+        <!-- Col 3 -->
+        <div class="w-80 shrink-0 flex flex-col bg-dark-900 border border-slate-800 rounded-xl overflow-hidden">
+          <div class="p-3 border-b border-slate-800 bg-cyan-500/5 flex items-center justify-between">
+            <span class="text-xs font-bold text-cyan-400 flex items-center gap-1.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-cyan-400"></span> Waiting for Review
+            </span>
+            <span id="colCountReview" class="text-xs px-2 py-0.5 rounded-full bg-dark-850 text-cyan-400 font-bold border border-cyan-500/30">0</span>
+          </div>
+          <div id="colReviewList" class="p-3 flex-1 overflow-y-auto space-y-2.5"></div>
+        </div>
+        <!-- Col 4 -->
+        <div class="w-80 shrink-0 flex flex-col bg-dark-900 border border-slate-800 rounded-xl overflow-hidden">
+          <div class="p-3 border-b border-slate-800 bg-amber-500/5 flex items-center justify-between">
+            <span class="text-xs font-bold text-amber-400 flex items-center gap-1.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span> Waiting on Author
+            </span>
+            <span id="colCountAuthor" class="text-xs px-2 py-0.5 rounded-full bg-dark-850 text-amber-400 font-bold border border-amber-500/30">0</span>
+          </div>
+          <div id="colAuthorList" class="p-3 flex-1 overflow-y-auto space-y-2.5"></div>
+        </div>
+        <!-- Col 5 -->
+        <div class="w-80 shrink-0 flex flex-col bg-dark-900 border border-slate-800 rounded-xl overflow-hidden">
+          <div class="p-3 border-b border-slate-800 bg-rose-500/5 flex items-center justify-between">
+            <span class="text-xs font-bold text-rose-400 flex items-center gap-1.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-rose-400"></span> Failing CI / Conflicts
+            </span>
+            <span id="colCountFail" class="text-xs px-2 py-0.5 rounded-full bg-dark-850 text-rose-400 font-bold border border-rose-500/30">0</span>
+          </div>
+          <div id="colFailList" class="p-3 flex-1 overflow-y-auto space-y-2.5"></div>
+        </div>
+        <!-- Col 6 -->
+        <div class="w-80 shrink-0 flex flex-col bg-dark-900 border border-slate-800 rounded-xl overflow-hidden">
+          <div class="p-3 border-b border-slate-800 bg-slate-500/5 flex items-center justify-between">
+            <span class="text-xs font-bold text-slate-400 flex items-center gap-1.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-slate-500"></span> Draft / In Progress
+            </span>
+            <span id="colCountDraft" class="text-xs px-2 py-0.5 rounded-full bg-dark-850 text-slate-400 font-bold border border-slate-500/30">0</span>
+          </div>
+          <div id="colDraftList" class="p-3 flex-1 overflow-y-auto space-y-2.5"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PAGE 4: Reviewer Load & Action Inbox -->
+    <section id="pageReviewers" class="page-view hidden w-full h-full overflow-y-auto p-6">
+      <div class="max-w-7xl mx-auto space-y-6">
+
+        <!-- Selected Reviewer Action Inbox (Priority Executive Drilldown) -->
+        <div id="reviewerInboxCard" class="hidden bg-dark-900 border border-violet-500/40 rounded-xl p-5 shadow-2xl transition duration-200">
+          <!-- Header -->
+          <div class="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-800">
+            <div class="flex items-center gap-3">
+              <span class="w-11 h-11 rounded-xl bg-violet-500/15 border border-violet-500/30 flex items-center justify-center text-violet-300 text-xl font-bold font-mono">
+                @
+              </span>
+              <div>
+                <div class="flex items-center gap-2">
+                  <h2 id="inboxReviewerName" class="text-base font-bold text-white tracking-tight">@reviewer</h2>
+                  <a id="inboxGhLink" href="#" target="_blank" rel="noopener" class="text-xs text-slate-400 hover:text-white inline-flex items-center gap-1 font-mono">
+                    <i class="ph ph-github-logo"></i> GitHub
+                  </a>
+                  <span class="text-xs px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-300 font-semibold border border-violet-500/30 font-mono">Executive Review Inbox</span>
+                </div>
+                <div id="inboxStatChips" class="flex flex-wrap items-center gap-2 text-xs text-slate-400 mt-1 font-mono"></div>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <button onclick="clearSelectedReviewer()" class="px-3 py-1.5 rounded-lg bg-dark-850 hover:bg-slate-800 text-slate-300 hover:text-white text-xs border border-slate-700/80 transition flex items-center gap-1.5">
+                <i class="ph ph-arrow-left"></i> View All Reviewers
+              </button>
+            </div>
+          </div>
+
+          <!-- 4 Action Bucket Tabs -->
+          <div class="mt-4 flex flex-wrap items-center gap-2" id="inboxTabs">
+            <button onclick="switchInboxBucket('ready_decision')" id="tab_ready_decision" class="inbox-tab px-3 py-2 rounded-lg text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 transition flex items-center gap-2">
+              <span>🟢 Ready for Decision</span>
+              <span id="badge_ready_decision" class="px-1.5 py-0.5 rounded-full bg-dark-950 font-mono text-[11px] text-emerald-300 border border-emerald-500/30">0</span>
+            </button>
+            <button onclick="switchInboxBucket('stack_unblockers')" id="tab_stack_unblockers" class="inbox-tab px-3 py-2 rounded-lg text-xs font-semibold bg-dark-850 text-slate-400 hover:text-white border border-slate-800 transition flex items-center gap-2">
+              <span>⚡ High-Leverage Unblockers</span>
+              <span id="badge_stack_unblockers" class="px-1.5 py-0.5 rounded-full bg-dark-950 font-mono text-[11px] text-fuchsia-300 border border-fuchsia-500/30">0</span>
+            </button>
+            <button onclick="switchInboxBucket('quick_wins')" id="tab_quick_wins" class="inbox-tab px-3 py-2 rounded-lg text-xs font-semibold bg-dark-850 text-slate-400 hover:text-white border border-slate-800 transition flex items-center gap-2">
+              <span>⏱️ Quick Wins (&lt;60 churn)</span>
+              <span id="badge_quick_wins" class="px-1.5 py-0.5 rounded-full bg-dark-950 font-mono text-[11px] text-cyan-300 border border-cyan-500/30">0</span>
+            </button>
+            <button onclick="switchInboxBucket('stale_or_author')" id="tab_stale_or_author" class="inbox-tab px-3 py-2 rounded-lg text-xs font-semibold bg-dark-850 text-slate-400 hover:text-white border border-slate-800 transition flex items-center gap-2">
+              <span>💤 Waiting on Author / Stale CI</span>
+              <span id="badge_stale_or_author" class="px-1.5 py-0.5 rounded-full bg-dark-950 font-mono text-[11px] text-amber-400 border border-amber-500/30">0</span>
+            </button>
+            <button onclick="switchInboxBucket('all_pending')" id="tab_all_pending" class="inbox-tab px-3 py-2 rounded-lg text-xs font-semibold bg-dark-850 text-slate-400 hover:text-white border border-slate-800 transition flex items-center gap-2">
+              <span>📋 All Requests</span>
+              <span id="badge_all_pending" class="px-1.5 py-0.5 rounded-full bg-dark-950 font-mono text-[11px] text-slate-300 border border-slate-700">0</span>
+            </button>
+          </div>
+
+          <!-- Bucket Description Banner -->
+          <div id="inboxBucketDescription" class="mt-3 p-2.5 bg-dark-950/70 border border-slate-800/80 rounded-lg text-xs text-slate-300 flex flex-wrap items-center justify-between gap-2">
+            <span id="inboxBucketDescText">CI is passing and author addressed comments — ready for your review or approval.</span>
+            <span id="inboxBucketCountTag" class="font-mono text-slate-400 text-[11px]"></span>
+          </div>
+
+          <!-- PR List for Selected Bucket -->
+          <div class="mt-4 overflow-x-auto">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr class="border-b border-slate-800 text-slate-400 uppercase text-[10px] tracking-wider font-mono">
+                  <th class="py-2.5 px-3">PR</th>
+                  <th class="py-2.5 px-3">Title &amp; Subsystem</th>
+                  <th class="py-2.5 px-3">Author &amp; Wait</th>
+                  <th class="py-2.5 px-3">CI / Risk</th>
+                  <th class="py-2.5 px-3">Diff / Stack</th>
+                  <th class="py-2.5 px-3 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody id="inboxPrTableBody" class="divide-y divide-slate-800/60 font-sans"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Reviewer Directory Table -->
+        <div class="bg-dark-900 border border-slate-800 rounded-xl p-5 shadow-lg">
+          <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div>
+              <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                <i class="ph-bold ph-users text-violet-400 text-base"></i>
+                Reviewer Directory &amp; Workload
+                <span id="colCountReviewers" class="text-xs px-2 py-0.5 rounded-full bg-dark-850 text-violet-300 font-mono border border-violet-500/30">0</span>
+                <span class="text-slate-400 hover:text-white cursor-help" title="Actionable Now = non-draft, CI green/pending, non-conflicting, stack-unblocked PRs where the ball is on the reviewer (overdue >30d PRs included &amp; badged). Raw Pending = all open PRs listing the reviewer in GitHub reviewRequests (includes CODEOWNERS auto-assignments, drafts &amp; failing CI).">
+                  <i class="ph-bold ph-info text-sm"></i>
+                </span>
+              </h2>
+              <p class="text-xs text-slate-400 mt-0.5">Ranked by <strong class="text-emerald-300">Actionable Now</strong> — click any row to open their prioritized Action Inbox</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-3">
+              <label class="flex items-center gap-1.5 bg-dark-850 border border-slate-700 px-2.5 py-1 rounded-md text-xs text-slate-300 cursor-pointer">
+                <input type="checkbox" id="includeTeamsToggle" onchange="fetchReviewers()" class="accent-violet-500">
+                <span>Include @team queues</span>
+              </label>
+              <div id="reviewerWaitingSummary" class="text-xs text-slate-400 font-mono"></div>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr class="border-b border-slate-800 text-slate-400 uppercase text-[10px] tracking-wider font-mono">
+                  <th class="py-2.5 px-3">Reviewer</th>
+                  <th class="py-2.5 px-3 text-right" title="Non-draft, CI green/pending, non-conflicting, stack-unblocked PRs waiting on reviewer (includes overdue review requests >30d)">Actionable Now</th>
+                  <th class="py-2.5 px-3 text-right" title="Raw GitHub reviewRequests across all open PRs (includes CODEOWNERS, drafts &amp; failing CI) and stale review requests >30d">Raw Pending (Stale Req &gt;30d)</th>
+                  <th class="py-2.5 px-3 text-right">Oldest Actionable</th>
+                  <th class="py-2.5 px-3 text-right">Reviewed</th>
+                  <th class="py-2.5 px-3 text-right">Approved</th>
+                  <th class="py-2.5 px-3 text-right">Changes Req.</th>
+                  <th class="py-2.5 px-3 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody id="reviewerTableBody" class="divide-y divide-slate-800/60"></tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- PAGE 5: Merge Impact Simulator -->
+    <section id="pageSimulator" class="page-view hidden w-full h-full overflow-y-auto p-6">
+      <div class="bg-dark-900 border border-slate-800 rounded-xl p-6 shadow-xl max-w-5xl mx-auto">
+        <div class="flex items-center gap-3 mb-3">
+          <span class="w-9 h-9 rounded-lg bg-fuchsia-500/10 border border-fuchsia-500/30 flex items-center justify-center text-fuchsia-400 font-bold">
+            <i class="ph-bold ph-lightning text-lg"></i>
+          </span>
+          <div>
+            <h2 class="text-base font-bold text-white">Merge Impact Simulator</h2>
+            <p class="text-xs text-slate-400">Pick any stacked PR (or enter a PR number) to see downstream unblocks and concurrent rebase hazards.</p>
+          </div>
+        </div>
+
+        <div class="mt-4 flex flex-wrap items-center gap-3">
+          <select id="simPrSelect" onchange="if (this.value) { document.getElementById('simPrInput').value = this.value; runSimulation(this.value); }" class="flex-1 min-w-[260px] bg-dark-850 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-fuchsia-500 font-mono">
+            <option value="">Choose a stacked PR to simulate merge...</option>
+          </select>
+          <input id="simPrInput" type="number" min="1" placeholder="Or type PR #"
+            onkeydown="if (event.key === 'Enter') runSimulation(this.value)"
+            class="w-36 bg-dark-850 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-fuchsia-500 font-mono">
+          <button onclick="runSimulation(document.getElementById('simPrInput').value || document.getElementById('simPrSelect').value)" class="px-4 py-2 bg-fuchsia-600 hover:bg-fuchsia-500 text-white text-xs font-semibold rounded-lg transition shadow-md">
+            Simulate Impact
+          </button>
+        </div>
+
+        <div id="simError" class="hidden mt-4 text-xs text-rose-400 bg-rose-500/10 border border-rose-500/30 rounded-lg px-3 py-2"></div>
+
+        <!-- Simulation Results Container -->
+        <div id="simResults" class="hidden mt-6 space-y-6 border-t border-slate-800 pt-6">
+          <div id="simTargetHeader" class="bg-dark-950 border border-slate-800 rounded-lg p-3 flex items-center justify-between text-xs"></div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-4">
+              <span class="text-xs uppercase font-bold text-emerald-400 tracking-wider flex items-center gap-1.5">
+                <i class="ph-bold ph-check-circle text-base"></i> Immediately Unblocked PRs
+              </span>
+              <p id="simUnblockedSummary" class="text-xs text-slate-300 mt-1 font-medium"></p>
+              <div id="simUnblockedList" class="mt-3 space-y-2"></div>
+            </div>
+
+            <div class="bg-rose-500/5 border border-rose-500/20 rounded-xl p-4">
+              <span class="text-xs uppercase font-bold text-rose-400 tracking-wider flex items-center gap-1.5">
+                <i class="ph-bold ph-warning-diamond text-base"></i> Conflict &amp; Rebase Hazards
+              </span>
+              <p id="simHazardsSummary" class="text-xs text-slate-300 mt-1 font-medium"></p>
+              <div id="simHazardsList" class="mt-3 space-y-2"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Slide-over Drawer for PR Dossier -->
+    <aside id="dossierDrawer" class="w-96 max-w-full border-l border-slate-800 bg-dark-900 shrink-0 flex flex-col h-full transform translate-x-full transition-transform duration-200 ease-in-out z-30 shadow-2xl absolute right-0 top-0">
+      <div class="p-4 border-b border-slate-800 flex items-center justify-between bg-dark-850">
+        <div class="flex items-center gap-2">
+          <span id="drawerPrBadge" class="text-xs px-2.5 py-0.5 rounded font-bold font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">PR #0</span>
+          <span id="drawerStatusBadge" class="text-xs px-2 py-0.5 rounded font-semibold bg-slate-800 text-slate-300">Status</span>
+        </div>
+        <button onclick="closeDrawer()" class="text-slate-400 hover:text-white p-1 text-base">
+          <i class="ph ph-x"></i>
+        </button>
+      </div>
+
+      <div class="flex-1 overflow-y-auto p-5 space-y-5 text-xs">
+        <div>
+          <a id="drawerTitleLink" href="#" target="_blank" rel="noopener" class="block">
+            <h2 id="drawerTitle" class="text-sm font-bold text-white leading-snug hover:text-emerald-300 hover:underline">PR Title</h2>
+          </a>
+          <div class="mt-2 flex flex-wrap items-center gap-2 text-slate-400 text-xs">
+            <span>by <strong id="drawerAuthor" class="text-white">author</strong></span>
+            <span>•</span>
+            <span id="drawerIdleDays" class="text-amber-400 font-mono">0d idle</span>
+            <span>•</span>
+            <span id="drawerUpdatedDate" class="text-slate-500 font-mono">Date</span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-2" id="drawerActions">
+          <a id="actOpen" href="#" target="_blank" rel="noopener" class="flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold transition"><i class="ph-bold ph-github-logo"></i> Open PR</a>
+          <a id="actFiles" href="#" target="_blank" rel="noopener" class="flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold border border-slate-700 transition"><i class="ph ph-files"></i> Files</a>
+          <a id="actChecks" href="#" target="_blank" rel="noopener" class="flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold border border-slate-700 transition"><i class="ph ph-check-square"></i> Checks</a>
+        </div>
+
+        <div class="bg-dark-950 border border-slate-800 rounded-lg p-3">
+          <span class="text-xs uppercase font-bold text-slate-500 tracking-wider">Engine Diagnosis</span>
+          <p id="drawerDiagnosis" class="text-xs text-slate-200 mt-1 font-medium">Awaiting maintainer review</p>
+        </div>
+
+        <div class="bg-dark-950 border border-slate-800 rounded-lg p-3">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="text-xs uppercase font-bold text-slate-500 tracking-wider">Change Risk</span>
+              <button onclick="openRiskFormulaModal()" class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 font-mono transition">? Formula</button>
+            </div>
+            <span id="drawerRiskBadge" class="text-xs px-2 py-0.5 rounded font-bold font-mono bg-slate-800 text-slate-300">0 LOW</span>
+          </div>
+          <div id="drawerRiskMath" class="mt-2 px-2.5 py-1.5 rounded bg-dark-900 border border-slate-800/80 font-mono text-[11px] text-cyan-300"></div>
+          <div id="drawerRiskAreas" class="flex flex-wrap gap-1 mt-2"></div>
+          <ul id="drawerRiskReasons" class="mt-2 space-y-1 text-xs text-slate-300 list-disc list-inside"></ul>
+        </div>
+
+        <div>
+          <span class="text-xs uppercase font-bold text-slate-500 tracking-wider">Technical Signals</span>
+          <div class="grid grid-cols-2 gap-2 mt-2">
+            <div class="bg-dark-950 p-2.5 rounded border border-slate-800">
+              <span class="text-slate-500 text-xs">CI Check</span>
+              <p id="drawerCi" class="font-bold text-slate-200 mt-0.5 font-mono">SUCCESS</p>
+            </div>
+            <div class="bg-dark-950 p-2.5 rounded border border-slate-800">
+              <span class="text-slate-500 text-xs">Review Decision</span>
+              <p id="drawerReview" class="font-bold text-slate-200 mt-0.5 font-mono">APPROVED</p>
+            </div>
+            <div class="bg-dark-950 p-2.5 rounded border border-slate-800">
+              <span class="text-slate-500 text-xs">Mergeable State</span>
+              <p id="drawerMergeable" class="font-bold text-slate-200 mt-0.5 font-mono">MERGEABLE</p>
+            </div>
+            <div class="bg-dark-950 p-2.5 rounded border border-slate-800">
+              <span class="text-slate-500 text-xs">Changed Files</span>
+              <p id="drawerFilesCount" class="font-bold text-slate-200 mt-0.5 font-mono">12 files</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-dark-950 border border-slate-800 rounded-lg p-3">
+          <div class="flex items-center justify-between">
+            <span class="text-xs uppercase font-bold text-slate-500 tracking-wider">Review Flow</span>
+            <span id="drawerWaitingBadge" class="text-xs px-2 py-0.5 rounded font-bold font-mono bg-slate-800 text-slate-300">—</span>
+          </div>
+          <div id="drawerReviewFlow" class="mt-2 space-y-1 text-xs text-slate-300"></div>
+        </div>
+
+        <div>
+          <span class="text-xs uppercase font-bold text-slate-500 tracking-wider">Dependencies &amp; Stacks</span>
+          <div class="mt-2 space-y-2">
+            <div>
+              <span class="text-xs text-slate-400">Blocked by (Upstream PRs):</span>
+              <div id="drawerBlockedBy" class="flex flex-wrap gap-1.5 mt-1 font-mono">
+                <span class="text-slate-500 italic font-sans text-xs">None (Unblocked)</span>
+              </div>
+            </div>
+            <div>
+              <span class="text-xs text-slate-400">Blocks (Downstream PRs):</span>
+              <div id="drawerBlocks" class="flex flex-wrap gap-1.5 mt-1 font-mono">
+                <span class="text-slate-500 italic font-sans text-xs">None</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <span class="text-xs uppercase font-bold text-slate-500 tracking-wider">File Collisions (Concurrent PRs)</span>
+          <div id="drawerCollisionsList" class="mt-2 space-y-2">
+            <span class="text-slate-500 italic text-xs">No file collisions detected</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+  </main>
+
+  <!-- Published Risk Formula Modal -->
+  <div id="riskFormulaModal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onclick="if (event.target === this) closeRiskFormulaModal()">
+    <div class="bg-dark-900 border border-slate-700 rounded-2xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+      <div class="px-5 py-4 border-b border-slate-800 bg-dark-850 flex items-center justify-between">
+        <div>
+          <h3 class="text-sm font-bold text-white flex items-center gap-2">
+            <i class="ph-bold ph-function text-cyan-400 text-base"></i> How Change Risk Is Scored (Published Formula)
+          </h3>
+          <p class="text-[11px] text-slate-400 mt-0.5">Deterministic, reproducible score computed for every PR — click any PR to audit its exact math</p>
+        </div>
+        <button onclick="closeRiskFormulaModal()" class="text-slate-400 hover:text-white p-1"><i class="ph ph-x text-base"></i></button>
+      </div>
+      <div id="riskFormulaBody" class="p-5 overflow-y-auto space-y-4 text-xs"></div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = '/api/v1';
+    const PAGE_ROUTES = {
+      overview: { path: '/overview', el: 'pageOverview', subsystems: false, title: 'Overview' },
+      dag: { path: '/dag', el: 'pageDag', subsystems: true, title: 'Dependency DAG' },
+      collisions: { path: '/collisions', el: 'pageCollisions', subsystems: true, title: 'Collisions & Hotspots' },
+      triage: { path: '/triage', el: 'pageTriage', subsystems: true, title: 'Triage Board' },
+      reviewers: { path: '/reviewers', el: 'pageReviewers', subsystems: false, title: 'Reviewer Load' },
+      simulator: { path: '/simulator', el: 'pageSimulator', subsystems: false, title: 'Merge Simulator' },
+    };
+
+    function usesQueryPageRouting() {
+      if (!window.PR_RADAR_STATIC) return false;
+      if (window.PR_RADAR_QUERY_ROUTES === true) return true;
+      if (window.PR_RADAR_QUERY_ROUTES === false) return false;
+      return /(?:^|\.)(?:hf\.space|huggingface\.co)$/i.test(window.location.hostname || '');
+    }
+
+    function hasMultipleRepos() {
+      const sel = document.getElementById('repoSelect');
+      return Boolean(sel && sel.options && sel.options.length > 1);
+    }
+
+    function pageFromLocation() {
+      const params = new URLSearchParams(window.location.search);
+      const qPage = params.get('page');
+      if (qPage && PAGE_ROUTES[qPage]) return qPage;
+      const hashPage = (window.location.hash || '').replace(/^#\/?/, '').split('?')[0];
+      if (hashPage && PAGE_ROUTES[hashPage]) return hashPage;
+      const clean = (window.location.pathname || '/').replace(/\/+$/, '') || '/';
+      if (clean === '/' || clean === '/overview') return 'overview';
+      const key = clean.slice(1);
+      return PAGE_ROUTES[key] ? key : 'overview';
+    }
+
+    function pageHref(page, extra = {}) {
+      const qs = new URLSearchParams();
+      const queryRouting = usesQueryPageRouting();
+      if (queryRouting && page !== 'overview') qs.set('page', page);
+      if (REPO && hasMultipleRepos()) qs.set('repo', REPO);
+      Object.entries(extra).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && v !== '') qs.set(k, String(v));
+      });
+      const base = queryRouting ? '/' : PAGE_ROUTES[page].path;
+      const q = qs.toString();
+      return `${base}${q ? '?' + q : ''}`;
+    }
+
+    const initParams = new URLSearchParams(window.location.search);
+    let REPO = initParams.get('repo') || '';
+    let currentFilter = initParams.get('subsystem') || 'ALL';
+    let searchQuery = (initParams.get('q') || '').toLowerCase();
+    let dagScope = initParams.get('scope') || 'stacks';
+    let activePage = pageFromLocation();
+
+    let lastOverview = null;
+    let lastDagData = null;
+    let lastHotspots = [];
+    let showAllHotspots = false;
+    let activeCollisionFile = initParams.get('file') || '';
+    let triageCompact = false;
+    let soloShowLimit = 120;
+    const expandedHotspots = new Set();
+    const expandedReviewers = new Set();
+    let selectedReviewer = initParams.get('reviewer') || (searchQuery && activePage === 'reviewers' ? searchQuery : '');
+    let activeInboxBucket = 'ready_decision';
+    let lastInboxData = null;
+
+    function esc(s) {
+      return String(s ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function apiUrl(path, params = {}) {
+      const qs = new URLSearchParams();
+      if (REPO) qs.set('repo', REPO);
+      Object.entries(params).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && v !== '') qs.set(k, String(v));
+      });
+      const q = qs.toString();
+      return `${API_BASE}${path}${q ? '?' + q : ''}`;
+    }
+
+    const _staticJsonCache = {};
+    async function loadStaticJson(file) {
+      if (!_staticJsonCache[file]) {
+        const res = await fetch(`/static-data/${file}`);
+        if (!res.ok) throw new Error(`Failed loading /static-data/${file}: ${res.status}`);
+        _staticJsonCache[file] = await res.json();
+      }
+      return _staticJsonCache[file];
+    }
+
+    function compileSubsystemRegex(pattern) {
+      if (!pattern || pattern === 'ALL') return null;
+      return new RegExp(pattern.replace(/^\(\?i\)/, ''), 'i');
+    }
+
+    async function staticApiFetch(path, params = {}) {
+      const ok = data => ({ ok: true, status: 200, json: async () => data });
+      const err = (status, detail) => ({ ok: false, status, json: async () => ({ detail }) });
+
+      if (path === '/overview') return ok(await loadStaticJson('overview.json'));
+      if (path === '/health') return ok(await loadStaticJson('health.json'));
+      if (path === '/subsystems') return ok(await loadStaticJson('subsystems.json'));
+
+      if (path === '/dag') {
+        const full = await loadStaticJson('dag.json');
+        const scope = params.scope || 'stacks';
+        const re = compileSubsystemRegex(params.subsystem);
+        const chained = new Set();
+        (full.chains || []).forEach(c => c.forEach(num => chained.add(num)));
+
+        const nodes = [];
+        const included = new Set();
+        const nodeMap = {};
+        (full.nodes || []).forEach(n => { nodeMap[n.id] = n; });
+        (full.nodes || []).forEach(n => {
+          if (n.is_external) return;
+          if (scope === 'stacks' && !chained.has(n.id)) return;
+          if (re && !re.test(n.title || '')) return;
+          nodes.push(n);
+          included.add(n.id);
+        });
+        const matched = new Set(included);
+        const chains = (full.chains || []).filter(c => !re || c.some(num => matched.has(num)));
+        const cycles = (full.cycles || []).filter(c => !re || c.some(num => matched.has(num)));
+        const edges = [];
+        const seenEdges = new Set();
+        chains.forEach(chain => {
+          for (let i = 0; i < chain.length - 1; i++) {
+            const baseNum = chain[i], waitingNum = chain[i + 1];
+            [baseNum, waitingNum].forEach(num => {
+              if (!included.has(num) && nodeMap[num]) {
+                nodes.push(nodeMap[num]);
+                included.add(num);
+              }
+            });
+            const k = `${waitingNum}->${baseNum}`;
+            if (!seenEdges.has(k)) {
+              seenEdges.add(k);
+              edges.push({ from: waitingNum, to: baseNum, kind: 'stacked_on' });
+            }
+          }
+        });
+        return ok({ repo: full.repo, scope, nodes, edges, chains, cycles });
+      }
+
+      if (path === '/hotspots') {
+        const all = await loadStaticJson('hotspots.json');
+        const dossiers = await loadStaticJson('dossiers.json');
+        const re = compileSubsystemRegex(params.subsystem);
+        const limit = Number(params.limit || 15);
+        const rows = [];
+        for (const h of all) {
+          if (re) {
+            const pathMatch = re.test(h.path || '');
+            const prMatch = (h.pr_numbers || []).some(n => {
+              const d = dossiers[String(n)];
+              return d && re.test(d.title || '');
+            });
+            if (!pathMatch && !prMatch) continue;
+          }
+          rows.push(h);
+          if (rows.length >= limit) break;
+        }
+        return ok(rows);
+      }
+
+      if (path === '/collisions') {
+        const all = await loadStaticJson('collisions.json');
+        const re = compileSubsystemRegex(params.subsystem);
+        const q = params.search ? String(params.search).toLowerCase() : null;
+        const limit = Number(params.limit || 200);
+        const out = [];
+        for (const c of all) {
+          if (params.min_risk && c.risk_level !== params.min_risk) continue;
+          if (params.live_only === 'true' && !c.is_live_race) continue;
+          if (params.file && !(c.overlapping_files || []).includes(params.file)) continue;
+          if (re && !(re.test(c.pr_a_title || '') || re.test(c.pr_b_title || '') || (c.overlapping_files || []).some(f => re.test(f)))) continue;
+          if (q && !(
+            String(c.pr_a).includes(q) || String(c.pr_b).includes(q)
+            || (c.pr_a_title || '').toLowerCase().includes(q) || (c.pr_b_title || '').toLowerCase().includes(q)
+            || (c.pr_a_author || '').toLowerCase().includes(q) || (c.pr_b_author || '').toLowerCase().includes(q)
+            || (c.overlapping_files || []).some(f => f.toLowerCase().includes(q))
+          )) continue;
+          out.push(c);
+          if (limit > 0 && out.length >= limit) break;
+        }
+        return ok(out);
+      }
+
+      if (path === '/triage') {
+        const dossiers = await loadStaticJson('dossiers.json');
+        const re = compileSubsystemRegex(params.subsystem);
+        const q = params.search ? String(params.search).toLowerCase() : null;
+        const perCol = Number(params.per_column || 60);
+        const cols = { ready_to_merge: [], blocked_by_dep: [], waiting_review: [], waiting_author: [], failing_ci: [], draft: [] };
+        Object.values(dossiers).forEach(d => {
+          if (re && !re.test(d.title || '')) return;
+          if (q && !((d.title || '').toLowerCase().includes(q) || (d.author || '').toLowerCase().includes(q) || String(d.number).includes(q))) return;
+          if (d.is_draft) cols.draft.push(d);
+          else if (d.status === 'READY_TO_MERGE') cols.ready_to_merge.push(d);
+          else if (d.status === 'BLOCKED_BY_DEP') cols.blocked_by_dep.push(d);
+          else if (d.status === 'CI_FAILURE' || d.status === 'CONFLICTING') cols.failing_ci.push(d);
+          else if (d.status === 'CHANGES_REQUESTED') cols.waiting_author.push(d);
+          else cols.waiting_review.push(d);
+        });
+        const totals = {};
+        Object.keys(cols).forEach(k => {
+          totals[k] = cols[k].length;
+          cols[k].sort((a, b) => (b.risk_score || 0) - (a.risk_score || 0));
+          if (perCol > 0) cols[k] = cols[k].slice(0, perCol);
+        });
+        cols._totals = totals;
+        return ok(cols);
+      }
+
+      if (path === '/reviewers') {
+        let rows = await loadStaticJson('reviewers.json');
+        if (String(params.include_teams) === 'false') {
+          rows = rows.filter(r => !r.is_team && !(r.reviewer || '').startsWith('@team/'));
+        }
+        if (params.search) {
+          const q = String(params.search).toLowerCase();
+          rows = rows.filter(r => (r.reviewer || '').toLowerCase().includes(q));
+        }
+        return ok(rows.slice(0, Number(params.limit || 50)));
+      }
+
+      if (path.startsWith('/reviewers/') && path !== '/reviewers') {
+        const handle = decodeURIComponent(path.slice('/reviewers/'.length)).toLowerCase();
+        const isTeam = handle.startsWith('@team/');
+        const teamName = isTeam ? handle.slice('@team/'.length) : '';
+        const revs = await loadStaticJson('reviewers.json');
+        const dossiersMap = await loadStaticJson('dossiers.json');
+        const rMatches = revs.filter(r => (r.reviewer || '').toLowerCase() === handle);
+        const summary = rMatches[0] || {
+          reviewer: handle,
+          is_team: isTeam,
+          actionable_pending: 0,
+          actionable_stale_30d: 0,
+          pending_requests: 0,
+          stale_pending_30d: 0,
+          reviews_submitted: 0,
+          approvals: 0,
+          changes_requested: 0,
+          actionable_pr_numbers: [],
+          pending_pr_numbers: [],
+          oldest_actionable_days: 0.0,
+          oldest_pending_days: 0.0,
+        };
+        const pendingNums = new Set(summary.pending_pr_numbers || []);
+        Object.values(dossiersMap).forEach(d => {
+          const flow = d.review_flow || {};
+          if (isTeam) {
+            const teams = (flow.requested_teams || []).map(x => String(x).toLowerCase());
+            if (teams.includes(teamName)) pendingNums.add(d.number);
+          } else {
+            const reqs = (flow.requested_reviewers || []).map(x => String(x).toLowerCase());
+            if (reqs.includes(handle)) pendingNums.add(d.number);
+          }
+        });
+        const dossiers = Array.from(pendingNums).map(n => dossiersMap[String(n)]).filter(Boolean);
+
+        const ready_decision = [];
+        const stack_unblockers = [];
+        const quick_wins = [];
+        const stale_or_author = [];
+
+        dossiers.forEach(d => {
+          const flow = d.review_flow || {};
+          const status = d.status;
+          const ci = d.ci_status;
+          const is_draft = Boolean(d.is_draft);
+          const blocks = d.blocks || [];
+          const blocked_by = d.blocked_by || [];
+          const files = d.files_changed_count || 0;
+          const lines = d.lines_changed || 0;
+          const waiting_on = flow.waiting_on;
+
+          if (blocks.length > 0) stack_unblockers.push(d);
+          if (waiting_on === 'REVIEWER' && !is_draft && !blocked_by.length && d.mergeable !== 'CONFLICTING' && ci !== 'FAILURE') {
+            ready_decision.push(d);
+          } else if (waiting_on === 'AUTHOR' || waiting_on === 'NONE' || ['CHANGES_REQUESTED', 'CI_FAILURE', 'CONFLICTING', 'DRAFT', 'BLOCKED_BY_DEP'].includes(status) || is_draft) {
+            stale_or_author.push(d);
+          }
+          if (waiting_on === 'REVIEWER' && (files <= 3 || lines <= 60 || d.risk_level === 'LOW') && !is_draft && !blocked_by.length && ci === 'SUCCESS' && !['CONFLICTING', 'CI_FAILURE'].includes(status)) {
+            quick_wins.push(d);
+          }
+        });
+
+        ready_decision.sort((a, b) => (b.risk_score || 0) - (a.risk_score || 0));
+        stack_unblockers.sort((a, b) => (b.blocks || []).length - (a.blocks || []).length);
+        quick_wins.sort((a, b) => (a.lines_changed || 0) - (b.lines_changed || 0));
+        stale_or_author.sort((a, b) => (b.staleness_days || 0) - (a.staleness_days || 0));
+        dossiers.sort((a, b) => (b.risk_score || 0) - (a.risk_score || 0));
+
+        return ok({
+          reviewer: summary.reviewer || handle,
+          summary,
+          counts: {
+            ready_decision: ready_decision.length,
+            stack_unblockers: stack_unblockers.length,
+            quick_wins: quick_wins.length,
+            stale_or_author: stale_or_author.length,
+            all_pending: dossiers.length,
+          },
+          buckets: {
+            ready_decision,
+            stack_unblockers,
+            quick_wins,
+            stale_or_author,
+            all_pending: dossiers,
+          }
+        });
+      }
+
+      if (path.startsWith('/prs/')) {
+        const num = path.slice('/prs/'.length);
+        const dossiers = await loadStaticJson('dossiers.json');
+        return dossiers[num] ? ok(dossiers[num]) : err(404, `PR #${num} not found in snapshot`);
+      }
+
+      if (path.startsWith('/simulate/merge/')) {
+        const prNum = Number(path.slice('/simulate/merge/'.length));
+        const [dag, dossiers, collisions] = await Promise.all([
+          loadStaticJson('dag.json'),
+          loadStaticJson('dossiers.json'),
+          loadStaticJson('collisions.json'),
+        ]);
+        const nodeMap = {};
+        (dag.nodes || []).forEach(n => { nodeMap[n.id] = n; });
+        const target = dossiers[String(prNum)] || nodeMap[prNum];
+        if (!target) return err(404, `PR #${prNum} not found in index or graph`);
+
+        const dependents = [];
+        const blockersByPr = {};
+        (dag.edges || []).forEach(e => {
+          blockersByPr[e.from] = blockersByPr[e.from] || [];
+          blockersByPr[e.from].push(e.to);
+          if (e.to === prNum && !dependents.includes(e.from)) dependents.push(e.from);
+        });
+        const unblocked_prs = dependents.map(depNum => {
+          const dep = dossiers[String(depNum)] || nodeMap[depNum] || {};
+          const other = (blockersByPr[depNum] || []).filter(b => b !== prNum);
+          return {
+            pr_number: depNum,
+            title: dep.title || `PR #${depNum}`,
+            author: dep.author || 'External',
+            ci_status: dep.ci_status || 'UNKNOWN',
+            fully_unblocked: other.length === 0,
+            remaining_blockers: other,
+          };
+        });
+        const seenHazard = new Set();
+        const collision_hazards = [];
+        const addHazard = (otherNum, riskLevel, sharedChurn, files, liveRace) => {
+          if (seenHazard.has(otherNum)) return;
+          seenHazard.add(otherNum);
+          const other = dossiers[String(otherNum)] || {};
+          collision_hazards.push({
+            pr_number: otherNum,
+            title: other.title || `PR #${otherNum}`,
+            author: other.author || 'Unknown',
+            risk_level: riskLevel,
+            shared_churn: sharedChurn || 0,
+            overlapping_files: files || [],
+            is_live_race: Boolean(liveRace),
+          });
+        };
+        collisions.forEach(c => {
+          if (c.pr_a === prNum || c.pr_b === prNum) {
+            addHazard(c.pr_a === prNum ? c.pr_b : c.pr_a, c.risk_level, c.shared_churn, c.overlapping_files, c.is_live_race);
+          }
+        });
+        if (dossiers[String(prNum)] && dossiers[String(prNum)].collisions) {
+          dossiers[String(prNum)].collisions.forEach(c => {
+            addHazard(c.colliding_pr, c.risk_level, 0, c.overlapping_files, c.is_live_race);
+          });
+        }
+        return ok({
+          merged_pr: {
+            number: prNum,
+            title: target.title || `PR #${prNum}`,
+            author: target.author || 'External',
+            ci_status: target.ci_status || 'UNKNOWN',
+          },
+          unblocks_count: unblocked_prs.length,
+          unblocked_prs,
+          collision_hazards_count: collision_hazards.length,
+          collision_hazards,
+        });
+      }
+
+      return err(404, `Unsupported static endpoint: ${path}`);
+    }
+
+    async function apiFetch(path, params = {}, options = undefined) {
+      if (window.PR_RADAR_STATIC && (!options || !options.method || options.method === 'GET')) {
+        return staticApiFetch(path, params);
+      }
+      return fetch(apiUrl(path, params), options);
+    }
+
+    function syncRepoSelector(repoSlug) {
+      if (!repoSlug) return;
+      REPO = repoSlug;
+      const sel = document.getElementById('repoSelect');
+      if (sel) {
+        if (!Array.from(sel.options).some(o => o.value === repoSlug)) {
+          const opt = document.createElement('option');
+          opt.value = repoSlug;
+          opt.textContent = repoSlug;
+          opt.className = 'bg-dark-900';
+          sel.appendChild(opt);
+        }
+        sel.value = repoSlug;
+      }
+      const badge = document.getElementById('repoEngineBadge');
+      if (badge) {
+        badge.textContent = `${repoSlug.split('/').pop() || 'Repo'} Engine`;
+      }
+    }
+
+    function syncBrowserUrl(push = false) {
+      const u = new URL(window.location.href);
+      if (usesQueryPageRouting()) {
+        u.pathname = '/';
+        if (activePage !== 'overview') u.searchParams.set('page', activePage);
+        else u.searchParams.delete('page');
+      } else {
+        u.pathname = PAGE_ROUTES[activePage].path;
+        u.searchParams.delete('page');
+      }
+      if (REPO && hasMultipleRepos()) u.searchParams.set('repo', REPO); else u.searchParams.delete('repo');
+      if (currentFilter !== 'ALL') u.searchParams.set('subsystem', currentFilter); else u.searchParams.delete('subsystem');
+      if (searchQuery) u.searchParams.set('q', searchQuery); else u.searchParams.delete('q');
+      if (activePage === 'collisions' && activeCollisionFile) u.searchParams.set('file', activeCollisionFile); else u.searchParams.delete('file');
+      if (activePage === 'reviewers' && selectedReviewer) u.searchParams.set('reviewer', selectedReviewer); else u.searchParams.delete('reviewer');
+      if (push) window.history.pushState({}, '', u.toString());
+      else window.history.replaceState({}, '', u.toString());
+    }
+
+    function navClick(evt, page) {
+      if (evt && (evt.metaKey || evt.ctrlKey || evt.shiftKey || evt.altKey)) return true;
+      if (evt) evt.preventDefault();
+      navigate(page, true);
+      return false;
+    }
+
+    async function navigate(page, push = false) {
+      activePage = PAGE_ROUTES[page] ? page : 'overview';
+      syncBrowserUrl(push);
+      renderPageChrome();
+      await loadActivePage();
+    }
+
+    function renderPageChrome() {
+      document.title = `PR Radar — ${PAGE_ROUTES[activePage].title}`;
+      document.querySelectorAll('.page-view').forEach(el => el.classList.add('hidden'));
+      document.getElementById(PAGE_ROUTES[activePage].el).classList.remove('hidden');
+
+      document.querySelectorAll('.nav-link').forEach(a => {
+        const isCurrent = a.dataset.page === activePage;
+        a.className = isCurrent
+          ? 'nav-link flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold bg-emerald-500 text-white shadow-sm transition whitespace-nowrap'
+          : 'nav-link flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-slate-400 hover:text-white transition whitespace-nowrap';
+      });
+
+      const subBar = document.getElementById('subsystemToolbar');
+      if (PAGE_ROUTES[activePage].subsystems) subBar.classList.remove('hidden');
+      else subBar.classList.add('hidden');
+    }
+
+    async function switchRepo(repoSlug) {
+      if (!repoSlug) return;
+      syncRepoSelector(repoSlug);
+      currentFilter = 'ALL';
+      activeCollisionFile = '';
+      syncBrowserUrl(false);
+      await fetchOverview();
+      await fetchSubsystems();
+      await loadActivePage();
+    }
+
+    function prUrl(n) { return `https://github.com/${encodeURI(REPO || 'vllm-project/vllm')}/pull/${n}`; }
+    function ghLink(n, cls) {
+      return `<a href="${prUrl(n)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Open #${n} on GitHub" class="${cls || 'text-slate-500 hover:text-white'}"><i class="ph ph-arrow-square-out"></i></a>`;
+    }
+    function ghUserLink(handle, cls) {
+      return `<a href="https://github.com/${encodeURIComponent(handle)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Open @${esc(handle)} on GitHub" class="${cls || 'text-slate-500 hover:text-white'}"><i class="ph ph-arrow-square-out text-xs"></i></a>`;
+    }
+    function prChip(n, color) {
+      const c = color || 'cyan';
+      return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-${c}-500/10 text-${c}-400 border border-${c}-500/20 font-mono text-xs">` +
+        `<span onclick="openDrawer(${n})" class="cursor-pointer hover:underline">#${n}</span>${ghLink(n, `text-${c}-500/70 hover:text-${c}-300`)}</span>`;
+    }
+
+    function formatAge(iso) {
+      const mins = Math.max(0, (Date.now() - new Date(iso).getTime()) / 60000);
+      if (mins < 60) return `${Math.round(mins)}m ago`;
+      if (mins < 60 * 24) return `${Math.round(mins / 60)}h ago`;
+      return `${Math.round(mins / 1440)}d ago`;
+    }
+
+    function riskClass(level) {
+      if (level === 'CRITICAL') return 'bg-rose-500/20 text-rose-300 border border-rose-500/30';
+      if (level === 'HIGH') return 'bg-orange-500/20 text-orange-300 border border-orange-500/30';
+      if (level === 'MEDIUM') return 'bg-amber-500/15 text-amber-300 border border-amber-500/20';
+      return 'bg-slate-800 text-slate-400 border border-slate-700';
+    }
+
+    function riskBadge(pr) {
+      return `<span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${riskClass(pr.risk_level)}" title="${esc((pr.risk_reasons || []).join('\n'))}">⚠ ${pr.risk_score} ${esc(pr.risk_level)}</span>`;
+    }
+
+    function waitingClass(w) {
+      if (w === 'AUTHOR') return 'bg-amber-500/15 text-amber-300';
+      if (w === 'MERGE') return 'bg-emerald-500/15 text-emerald-300';
+      if (w === 'REVIEWER') return 'bg-cyan-500/15 text-cyan-300';
+      return 'bg-slate-800 text-slate-400';
+    }
+
+    function waitingBadge(flow) {
+      if (!flow) return '';
+      const label = flow.waiting_on === 'NONE' ? 'draft' : `on ${flow.waiting_on.toLowerCase()}`;
+      return `<span class="px-1.5 py-0.5 rounded text-[10px] font-mono ${waitingClass(flow.waiting_on)}">⏳ ${esc(label)} ${flow.waiting_days.toFixed(0)}d</span>`;
+    }
+
+    function statusClass(status) {
+      if (status === 'READY_TO_MERGE' || status === 'MERGED') return 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
+      if (status === 'BLOCKED_BY_DEP') return 'bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/30';
+      if (status === 'CI_FAILURE' || status === 'CONFLICTING' || status === 'CLOSED') return 'bg-rose-500/20 text-rose-300 border-rose-500/30';
+      if (status === 'CHANGES_REQUESTED') return 'bg-amber-500/20 text-amber-300 border-amber-500/30';
+      if (status === 'DRAFT') return 'bg-slate-700/40 text-slate-400 border-slate-600';
+      return 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30';
+    }
+
+    // Load Header Overview & Subsystems
+    async function fetchOverview() {
+      try {
+        const [ovRes, hRes] = await Promise.all([apiFetch('/overview'), apiFetch('/health')]);
+        const d = await ovRes.json();
+        const h = await hRes.json();
+        lastOverview = d;
+        if (d.repo) syncRepoSelector(d.repo);
+        document.getElementById('statTotalPrs').textContent = (d.total_open_prs ?? 0).toLocaleString();
+        document.getElementById('statStacks').textContent = (d.dependency_stacks_count ?? 0).toLocaleString();
+        const rb = d.risk_breakdown || {};
+        const rba = d.risk_breakdown_actionable || {};
+        const highAll = (rb.CRITICAL || 0) + (rb.HIGH || 0);
+        const highAct = (rba.CRITICAL || 0) + (rba.HIGH || 0);
+        document.getElementById('statHighRisk').textContent = `${highAct} actionable (${highAll} open)`;
+        const syncedEl = document.getElementById('statSynced');
+        const modeLabel = (d.sync_mode === 'hourly-snapshot' || d.sync_mode === 'static-snapshot')
+          ? 'hourly snapshot'
+          : (d.sync_mode || 'cache');
+        const refreshNote = h.refreshing ? ' · syncing…' : '';
+        syncedEl.textContent = (d.last_synced_at
+          ? `synced ${formatAge(d.last_synced_at)} · ${modeLabel}`
+          : 'not synced') + refreshNote;
+        syncedEl.title = h.sync_note || 'Updated hourly via GitHub GraphQL';
+        if (activePage === 'overview') renderOverview();
+      } catch (e) {
+        console.error('Error fetching overview:', e);
+      }
+    }
+
+    async function fetchSubsystems() {
+      const bar = document.getElementById('subsystemFilterBar');
+      if (!bar) return;
+      try {
+        const res = await apiFetch('/subsystems');
+        const subsystems = await res.json();
+        const pills = [{ name: 'All', pattern: 'ALL', count: null }].concat(
+          (subsystems || []).map(s => ({
+            name: s.name,
+            pattern: s.pattern.replace(/^\(\?i\)/, ''),
+            count: s.matching_prs_count,
+          }))
+        );
+        bar.innerHTML = '<span class="text-slate-500 font-semibold uppercase text-[10px] tracking-wider shrink-0 mr-1">Subsystems:</span>';
+        pills.forEach(p => {
+          const btn = document.createElement('button');
+          const active = currentFilter === p.pattern;
+          btn.className = active
+            ? 'subsystem-pill px-2.5 py-0.5 rounded-full font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 transition shrink-0'
+            : 'subsystem-pill px-2.5 py-0.5 rounded-full font-medium bg-slate-800 text-slate-400 hover:text-slate-200 transition shrink-0';
+          btn.textContent = p.count != null ? `${p.name} (${p.count})` : p.name;
+          btn.onclick = () => setSubsystemFilter(p.pattern, btn);
+          bar.appendChild(btn);
+        });
+      } catch (e) {
+        console.error('Error fetching subsystems:', e);
+      }
+    }
+
+    async function loadActivePage() {
+      if (activePage === 'overview') {
+        if (lastOverview) renderOverview(); else await fetchOverview();
+      } else if (activePage === 'dag') {
+        await fetchDag();
+      } else if (activePage === 'collisions') {
+        await Promise.all([fetchHotspots(), fetchCollisions()]);
+      } else if (activePage === 'triage') {
+        await fetchTriage();
+      } else if (activePage === 'reviewers') {
+        await fetchReviewers();
+      } else if (activePage === 'simulator') {
+        await populateSimulationOptions();
+      }
+    }
+
+    async function triggerSync() {
+      if (window.PR_RADAR_STATIC) {
+        Object.keys(_staticJsonCache).forEach(k => delete _staticJsonCache[k]);
+        await fetchOverview();
+        await fetchSubsystems();
+        await loadActivePage();
+        alert('Loaded latest static snapshot. For live GitHub GraphQL polling on-demand, run `pr-radar serve` locally or trigger the GitHub Actions Space sync.');
+        return;
+      }
+      const syncBtn = document.getElementById('syncBtn');
+      const syncIcon = document.getElementById('syncIcon');
+      syncIcon.classList.add('animate-spin');
+      syncBtn.disabled = true;
+      try {
+        const resp = await fetch(apiUrl('/sync'), { method: 'POST' });
+        const res = await resp.json();
+        alert(res.message);
+        await fetchOverview();
+        await fetchSubsystems();
+        await loadActivePage();
+      } catch (err) {
+        console.error('Sync failed:', err);
+      } finally {
+        syncIcon.classList.remove('animate-spin');
+        syncBtn.disabled = false;
+      }
+    }
+
+    // Risk Formula Modal
+    function openRiskFormulaModal() {
+      const modal = document.getElementById('riskFormulaModal');
+      const body = document.getElementById('riskFormulaBody');
+      if (!modal || !body) return;
+      const spec = (lastOverview && lastOverview.risk_formula) || {
+        equation: 'score = round(100 × (0.50 × sensitivity + 0.20 × churn + 0.30 × collision))',
+        weights: { sensitivity: 0.5, churn: 0.2, collision: 0.3 },
+        thresholds: { CRITICAL: 80, HIGH: 60, MEDIUM: 30, LOW: 0 },
+        churn_saturation_lines: 1500,
+        collision_weights: { live_critical: 0.4, live_high: 0.2, live_window_days: 5 },
+        multi_file_boost: 'max_weight × (1 + 0.05 × (sensitive_files - 1)), capped at 1.0',
+        path_rules: [],
+      };
+      const rules = spec.path_rules || [];
+      body.innerHTML = `
+        <div class="bg-dark-950 border border-cyan-500/30 rounded-xl p-3.5 font-mono text-cyan-300 text-xs">
+          ${esc(spec.equation)}
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center font-mono">
+          <div class="p-2 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-300"><div class="font-bold">≥ ${spec.thresholds.CRITICAL}</div><div class="text-[10px]">CRITICAL</div></div>
+          <div class="p-2 rounded-lg bg-orange-500/15 border border-orange-500/30 text-orange-300"><div class="font-bold">${spec.thresholds.HIGH}–${spec.thresholds.CRITICAL - 1}</div><div class="text-[10px]">HIGH</div></div>
+          <div class="p-2 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300"><div class="font-bold">${spec.thresholds.MEDIUM}–${spec.thresholds.HIGH - 1}</div><div class="text-[10px]">MEDIUM</div></div>
+          <div class="p-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300"><div class="font-bold">&lt; ${spec.thresholds.MEDIUM}</div><div class="text-[10px]">LOW</div></div>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          <div class="bg-dark-950 border border-slate-800 rounded-lg p-3">
+            <div class="font-bold text-white mb-1">50% Path Sensitivity</div>
+            <p class="text-slate-400 text-[11px]">Max matched path weight (0–1), boosted by +5% per extra sensitive file touched (${esc(spec.multi_file_boost)}).</p>
+          </div>
+          <div class="bg-dark-950 border border-slate-800 rounded-lg p-3">
+            <div class="font-bold text-white mb-1">20% Line Churn</div>
+            <p class="text-slate-400 text-[11px]"><code>min(1.0, (additions + deletions) / ${spec.churn_saturation_lines})</code>. Saturates at ${spec.churn_saturation_lines.toLocaleString()} lines.</p>
+          </div>
+          <div class="bg-dark-950 border border-slate-800 rounded-lg p-3">
+            <div class="font-bold text-white mb-1">30% Live Collisions</div>
+            <p class="text-slate-400 text-[11px]"><code>min(1.0, ${spec.collision_weights.live_critical}×CRIT + ${spec.collision_weights.live_high}×HIGH)</code> for active races only (both PRs pushed &lt;${spec.collision_weights.live_window_days}d). Stale overlaps score 0.</p>
+          </div>
+        </div>
+        <div>
+          <div class="text-[11px] uppercase tracking-wider font-bold text-slate-400 mb-2">Path Sensitivity Weight Table (${rules.length} rules, first match wins)</div>
+          <div class="border border-slate-800 rounded-lg overflow-hidden">
+            <table class="w-full text-left text-[11px] font-mono border-collapse">
+              <thead>
+                <tr class="bg-dark-950 border-b border-slate-800 text-slate-400">
+                  <th class="py-2 px-3">Subsystem Label</th>
+                  <th class="py-2 px-3">Path Regex</th>
+                  <th class="py-2 px-3 text-right">Weight</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-800/60">
+                ${rules.map(r => `
+                  <tr class="hover:bg-dark-850/50">
+                    <td class="py-1.5 px-3 text-slate-200 font-sans font-medium">${esc(r.label)}</td>
+                    <td class="py-1.5 px-3 text-slate-400 break-all">${esc(r.pattern)}</td>
+                    <td class="py-1.5 px-3 text-right font-bold ${r.weight >= 0.8 ? 'text-rose-400' : (r.weight >= 0.6 ? 'text-amber-300' : 'text-slate-400')}">${Number(r.weight).toFixed(1)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+      modal.classList.remove('hidden');
+    }
+
+    function closeRiskFormulaModal() {
+      const modal = document.getElementById('riskFormulaModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function renderPulseSparkline(pulse) {
+      const container = document.getElementById('overviewPulseWidget');
+      if (!container) return;
+      if (!pulse || !pulse.weekly_90d || !pulse.weekly_90d.length) {
+        container.innerHTML = `
+          <div class="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-1">90-Day PR Throughput</div>
+          <div class="text-[11px] text-slate-400 font-mono">Run <code>pr-radar sync</code> with GitHub auth to load 90-day opened/merged pulse.</div>`;
+        return;
+      }
+      const wks = pulse.weekly_90d;
+      const W = 250, H = 56, pad = 4;
+      const maxV = Math.max(1, ...wks.map(w => Math.max(w.opened || 0, w.merged || 0)));
+      const xAt = i => wks.length <= 1 ? pad : pad + (i / (wks.length - 1)) * (W - pad * 2);
+      const yAt = v => H - pad - ((v || 0) / maxV) * (H - pad * 2);
+      const ptsOpen = wks.map((w, i) => `${xAt(i).toFixed(1)},${yAt(w.opened).toFixed(1)}`).join(' ');
+      const ptsMerge = wks.map((w, i) => `${xAt(i).toFixed(1)},${yAt(w.merged).toFixed(1)}`).join(' ');
+      const net7 = (pulse.opened_7d || 0) - (pulse.merged_7d || 0);
+      const netSign = net7 >= 0 ? `+${net7}` : `${net7}`;
+      container.innerHTML = `
+        <div class="flex items-center justify-between gap-2 mb-1">
+          <span class="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Repo Pulse (7d / 90d)</span>
+          <span class="text-[10px] font-mono text-slate-400">net ${netSign}/wk</span>
+        </div>
+        <div class="flex items-center gap-3 text-xs font-mono mb-1.5">
+          <span class="text-amber-300 font-bold">+${(pulse.opened_7d || 0).toLocaleString()} opened</span>
+          <span class="text-slate-600">/</span>
+          <span class="text-emerald-400 font-bold">${(pulse.merged_7d || 0).toLocaleString()} merged</span>
+          <span class="text-[10px] text-slate-500">(7d)</span>
+        </div>
+        <svg viewBox="0 0 ${W} ${H}" class="w-full h-14 overflow-visible" aria-label="90-day weekly PR throughput">
+          <polyline fill="none" stroke="#fbbf24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" points="${ptsOpen}" />
+          <polyline fill="none" stroke="#34d399" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="${ptsMerge}" />
+          ${wks.map((w, i) => `<circle cx="${xAt(i).toFixed(1)}" cy="${yAt(w.merged).toFixed(1)}" r="2" fill="#34d399"><title>${w.week_start}..${w.week_end}: +${w.opened} opened / ${w.merged} merged</title></circle>`).join('')}
+        </svg>
+        <div class="flex items-center justify-between text-[10px] font-mono text-slate-500 mt-0.5">
+          <span>${esc(wks[0].week_start.slice(5))}</span>
+          <span>30d: +${(pulse.opened_30d || 0).toLocaleString()} / ${(pulse.merged_30d || 0).toLocaleString()} merged</span>
+          <span>${esc(wks[wks.length - 1].week_end.slice(5))}</span>
+        </div>
+      `;
+    }
+
+    // PAGE 0: Overview Renderer (Reconciled, Auditable, Differentiators First)
+    function renderOverview() {
+      const d = lastOverview;
+      if (!d) return;
+      const total = Math.max(1, d.total_open_prs || 1);
+      const rb = d.risk_breakdown || {};
+      const rba = d.risk_breakdown_actionable || {};
+      const highAll = (rb.CRITICAL || 0) + (rb.HIGH || 0);
+      const highAct = (rba.CRITICAL || 0) + (rba.HIGH || 0);
+      const sb = d.status_breakdown || {};
+      const wb = d.waiting_on_breakdown || {};
+      const wd = d.waiting_on_detail || {
+        reviewer_active: sb.WAITING_REVIEW || 0,
+        reviewer_stale: Math.max(0, (wb.REVIEWER || 0) - (sb.WAITING_REVIEW || 0)),
+        author_ci_or_conflict: (sb.CI_FAILURE || 0) + (sb.CONFLICTING || 0),
+        author_feedback: Math.max(0, (wb.AUTHOR || 0) - ((sb.CI_FAILURE || 0) + (sb.CONFLICTING || 0))),
+        merge_ready: sb.READY_TO_MERGE || 0,
+        draft: sb.DRAFT || 0,
+        stack_blocked: sb.BLOCKED_BY_DEP || 0,
+      };
+
+      // 1. Reconciled Triage Insight Banner (dynamically computed from post-fix numbers)
+      const onReviewer = wb.REVIEWER || 0;
+      const readyMerge = sb.READY_TO_MERGE || 0;
+      const notOnReviewer = Math.max(0, (d.total_open_prs || 0) - onReviewer - readyMerge);
+      const notOnReviewerPct = Math.round((notOnReviewer / total) * 100);
+      const ciPct = Math.round(((sb.CI_FAILURE || 0) / total) * 100);
+      const draftPct = Math.round(((sb.DRAFT || 0) / total) * 100);
+      const conflictPct = Math.round(((sb.CONFLICTING || 0) / total) * 100);
+      const revPct = Math.round((onReviewer / total) * 100);
+
+      const freshTag = document.getElementById('overviewFreshnessTag');
+      if (freshTag) {
+        freshTag.textContent = d.last_synced_at
+          ? `Updated hourly via GitHub GraphQL · synced ${formatAge(d.last_synced_at)}`
+          : 'Updated hourly via GitHub GraphQL';
+      }
+      const headlineEl = document.getElementById('overviewInsightHeadline');
+      if (headlineEl) {
+        headlineEl.innerHTML = `Of <strong class="text-white font-mono">${(d.total_open_prs || 0).toLocaleString()}</strong> open PRs, <strong class="text-emerald-300 font-mono">${notOnReviewerPct}% (${notOnReviewer.toLocaleString()})</strong> aren't waiting on a human reviewer — <strong class="text-rose-300 font-mono">${ciPct}%</strong> fail CI, <strong class="text-slate-300 font-mono">${draftPct}%</strong> are drafts, and <strong class="text-orange-300 font-mono">${conflictPct}%</strong> have merge conflicts. Only <strong class="text-cyan-300 font-mono">${onReviewer.toLocaleString()} (${revPct}%)</strong> are awaiting review (<strong class="text-cyan-200 font-mono">${wd.reviewer_active}</strong> active + <strong class="text-sky-300 font-mono">${wd.reviewer_stale}</strong> stalled ≥14d), and <strong class="text-emerald-400 font-mono">${readyMerge.toLocaleString()}</strong> are approved &amp; merge-ready.`;
+      }
+      const subEl = document.getElementById('overviewInsightSub');
+      if (subEl) {
+        subEl.innerHTML = `
+          <span class="px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">On Reviewer: ${onReviewer.toLocaleString()} (${wd.reviewer_active} active + ${wd.reviewer_stale} stalled PRs ≥14d)</span>
+          <span class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20" title="Approved + CI green/pending + non-conflicting + stack-unblocked + non-draft (includes mergeable: UNKNOWN)">Ready to Merge: ${readyMerge.toLocaleString()}</span>
+          <span class="px-2 py-0.5 rounded bg-rose-500/10 text-rose-300 border border-rose-500/20">Live Merge Races (&lt;5d): ${(d.live_race_collisions_count || 0).toLocaleString()}</span>
+        `;
+      }
+      renderPulseSparkline(d.repo_pulse);
+
+      // 2. 4 Reconciled KPI Cards
+      document.getElementById('overviewKpis').innerHTML = [
+        {
+          label: 'Open PRs Indexed',
+          val: (d.total_open_prs || 0).toLocaleString(),
+          sub: `${readyMerge.toLocaleString()} ready to merge · ${notOnReviewerPct}% hygiene/draft/stack`,
+          page: 'triage',
+          accent: 'text-emerald-400 border-emerald-500/20',
+        },
+        {
+          label: 'Dependency Stacks',
+          val: (d.dependency_stacks_count || 0).toLocaleString(),
+          sub: `${(d.foundational_unblockers || []).length} foundational base PRs`,
+          page: 'dag',
+          accent: 'text-fuchsia-400 border-fuchsia-500/20',
+        },
+        {
+          label: 'Live Merge Races (<5d)',
+          val: (d.live_race_collisions_count ?? d.critical_file_collisions ?? 0).toLocaleString(),
+          sub: `${(d.critical_file_collisions || 0).toLocaleString()} total CRITICAL overlaps`,
+          page: 'collisions',
+          accent: 'text-rose-400 border-rose-500/20',
+        },
+        {
+          label: 'Actionable Review Queue',
+          val: onReviewer.toLocaleString(),
+          sub: `${wd.reviewer_active} active + ${wd.reviewer_stale} stale · median ${d.median_reviewer_wait_days ?? 0}d wait`,
+          page: 'reviewers',
+          accent: 'text-violet-400 border-violet-500/20',
+        },
+      ].map(k => `
+        <a href="${pageHref(k.page)}" onclick="return navClick(event, '${k.page}')" class="bg-dark-900 border ${k.accent} hover:border-slate-600 rounded-xl p-4 transition block">
+          <div class="text-xs text-slate-400 font-medium">${k.label}</div>
+          <div class="text-2xl font-bold mt-1 font-mono ${k.accent.split(' ')[0]}">${k.val}</div>
+          <div class="text-[11px] text-slate-400 mt-1">${esc(k.sub)}</div>
+        </a>
+      `).join('');
+
+      // 3A. Middle-Left: Top Live Merge Races (Collision Radar Differentiator)
+      const liveCols = d.top_live_collisions || [];
+      document.getElementById('overviewLiveCollisions').innerHTML = liveCols.length
+        ? liveCols.map(c => {
+            const firstFile = (c.overlapping_files || [])[0] || '';
+            const extraFiles = Math.max(0, (c.overlapping_files || []).length - 1);
+            return `
+              <div class="bg-dark-950 border border-slate-800 hover:border-amber-500/40 rounded-lg p-3 transition">
+                <div class="flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <div class="flex items-center gap-1.5 font-mono">
+                    <span onclick="openDrawer(${c.pr_a})" class="cursor-pointer font-bold text-cyan-400 hover:underline">#${c.pr_a}</span>${ghLink(c.pr_a)}
+                    <span class="text-slate-500 text-[10px]">(${Number(c.pr_a_idle_days || 0).toFixed(0)}d)</span>
+                    <span class="text-amber-400 font-bold">⚔</span>
+                    <span onclick="openDrawer(${c.pr_b})" class="cursor-pointer font-bold text-cyan-400 hover:underline">#${c.pr_b}</span>${ghLink(c.pr_b)}
+                    <span class="text-slate-500 text-[10px]">(${Number(c.pr_b_idle_days || 0).toFixed(0)}d)</span>
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-[10px] px-1.5 py-0.5 rounded font-mono font-bold ${c.risk_level === 'CRITICAL' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'}">${esc(c.risk_level)} · ${c.shared_churn} lines</span>
+                  </div>
+                </div>
+                <div class="mt-1.5 text-[11px] text-slate-300 truncate">${esc(c.pr_a_title)} <span class="text-slate-500">vs</span> ${esc(c.pr_b_title)}</div>
+                <div class="mt-2 flex items-center justify-between gap-2">
+                  <span class="font-mono text-[10px] text-slate-400 truncate" title="${esc((c.overlapping_files || []).join(', '))}">${esc(firstFile)}${extraFiles > 0 ? ` +${extraFiles} more` : ''}</span>
+                  <div class="flex items-center gap-1.5 shrink-0">
+                    <button onclick="activeCollisionFile='${esc(firstFile).replace(/'/g, "\\'")}'; navClick(event, 'collisions');" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-semibold border border-slate-700">Inspect</button>
+                    <button onclick="navClick(event, 'simulator'); runSimulation(${c.pr_a});" class="px-2 py-0.5 rounded bg-fuchsia-600/20 hover:bg-fuchsia-600/35 text-fuchsia-300 text-[10px] font-semibold border border-fuchsia-500/40">Sim #${c.pr_a}</button>
+                  </div>
+                </div>
+              </div>`;
+          }).join('')
+        : '<div class="text-xs text-slate-500 italic py-4 text-center">No active &lt;5d CRITICAL/HIGH merge races detected right now.</div>';
+
+      // 3B. Middle-Right: Foundational Stack Unblockers (Dependency DAG Differentiator)
+      const unblockers = d.top_stack_unblockers || [];
+      document.getElementById('overviewStackUnblockers').innerHTML = unblockers.length
+        ? unblockers.map(u => {
+            const ciTag = u.ci_status === 'SUCCESS'
+              ? '<span class="text-emerald-400 font-mono text-[10px]">✓ CI</span>'
+              : (u.ci_status === 'FAILURE' ? '<span class="text-rose-400 font-mono text-[10px]">✗ CI</span>' : '<span class="text-amber-400 font-mono text-[10px]">⋯ CI</span>');
+            const chainHtml = (u.chain_preview || []).map((n, idx) =>
+              `<span onclick="openDrawer(${n})" class="cursor-pointer px-1.5 py-0.5 rounded font-mono text-[10px] ${idx === 0 ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-bold' : 'bg-dark-900 text-slate-300 border border-slate-700'}">#${n}</span>`
+            ).join('<span class="text-slate-600 text-[10px]">→</span>');
+            return `
+              <div class="bg-dark-950 border border-slate-800 hover:border-fuchsia-500/40 rounded-lg p-3 transition">
+                <div class="flex items-center justify-between gap-2 text-xs">
+                  <div class="flex items-center gap-1.5 font-mono">
+                    <span onclick="openDrawer(${u.number})" class="cursor-pointer font-bold text-emerald-400 hover:underline">#${u.number}</span>${ghLink(u.number)}
+                    <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30">⚡ Unblocks ${u.downstream_total_count} PR${u.downstream_total_count !== 1 ? 's' : ''}</span>
+                    ${ciTag}
+                  </div>
+                  <span class="text-[10px] px-1.5 py-0.5 rounded border font-mono ${statusClass(u.status)}">${esc(u.status)}</span>
+                </div>
+                <p onclick="openDrawer(${u.number})" class="cursor-pointer text-[11px] text-slate-200 font-medium mt-1.5 truncate hover:text-emerald-300">${esc(u.title)}</p>
+                <div class="mt-2 flex flex-wrap items-center justify-between gap-2">
+                  <div class="flex flex-wrap items-center gap-1">${chainHtml}${u.chain_length > 5 ? `<span class="text-[10px] text-slate-500 font-mono">+${u.chain_length - 5}</span>` : ''}</div>
+                  <div class="flex items-center gap-1.5 shrink-0">
+                    <button onclick="document.getElementById('searchInput').value='${u.number}'; handleSearch('${u.number}'); navClick(event, 'dag');" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-semibold border border-slate-700">Open DAG</button>
+                    <button onclick="navClick(event, 'simulator'); runSimulation(${u.number});" class="px-2 py-0.5 rounded bg-fuchsia-600/20 hover:bg-fuchsia-600/35 text-fuchsia-300 text-[10px] font-semibold border border-fuchsia-500/40">Simulate</button>
+                  </div>
+                </div>
+              </div>`;
+          }).join('')
+        : '<div class="text-xs text-slate-500 italic py-4 text-center">No open stacked PR chains detected.</div>';
+
+      // 4A. Highest Change-Risk Actionable PRs
+      const riskSplitEl = document.getElementById('overviewHighRiskSplit');
+      if (riskSplitEl) {
+        riskSplitEl.textContent = `High/Crit: ${highAct.toLocaleString()} actionable / ${highAll.toLocaleString()} all open`;
+        riskSplitEl.title = 'Actionable = PRs where the ball is on a reviewer or ready to merge (excludes drafts, failing CI, conflicts, and stack-blocked PRs).';
+      }
+      document.getElementById('overviewTopRisk').innerHTML = (d.top_risk_prs || []).map(p => {
+        const comp = p.risk_components;
+        const mathChip = comp
+          ? `<span class="text-[10px] font-mono text-cyan-300/90 bg-dark-900 border border-slate-800 px-1.5 py-0.5 rounded" title="Sensitivity ${comp.sensitivity} · Churn ${comp.churn} · Collisions ${comp.collision}">S:${comp.sensitivity.toFixed(2)} · C:${comp.churn.toFixed(2)} · X:${comp.collision.toFixed(2)}</span>`
+          : '';
+        return `
+          <div onclick="openDrawer(${p.number})" class="cursor-pointer bg-dark-950 border border-slate-800 hover:border-slate-600 rounded-lg p-3 flex items-center justify-between gap-3">
+            <div class="min-w-0">
+              <div class="flex flex-wrap items-center gap-2 text-xs">
+                <span class="font-mono font-bold text-cyan-400">#${p.number}</span>${ghLink(p.number)}
+                ${riskBadge(p)}
+                ${mathChip}
+              </div>
+              <p class="text-xs text-slate-200 font-medium mt-1 truncate">${esc(p.title)}</p>
+            </div>
+            <div class="flex flex-wrap gap-1 justify-end shrink-0 max-w-xs">
+              ${(p.sensitive_areas || []).slice(0, 2).map(a => `<span class="px-1.5 py-0.5 rounded text-[10px] bg-rose-500/10 text-rose-300 border border-rose-500/20">${esc(a)}</span>`).join('')}
+            </div>
+          </div>`;
+      }).join('') || '<span class="text-xs text-slate-500 italic">No PRs indexed.</span>';
+
+      // 4B. Reconciled Triage Breakdown (ALL 8 statuses including STALE -> exact 100%)
+      const statusEntries = [
+        ['READY_TO_MERGE', 'Ready to Merge', 'bg-emerald-400', 'Approved + CI green/pending + non-conflicting + stack-unblocked + non-draft (includes mergeable: UNKNOWN)'],
+        ['WAITING_REVIEW', 'Waiting on Review (<14d)', 'bg-cyan-400', 'Healthy CI, non-conflicting, unblocked PRs updated within 14d awaiting review'],
+        ['STALE', 'Stale PR (≥14d stalled, unblocked)', 'bg-sky-600', 'Unblocked PRs with green/pending CI and no activity for ≥14 days'],
+        ['BLOCKED_BY_DEP', 'Blocked by Stack', 'bg-fuchsia-400', 'Depends on an open upstream PR in a stack'],
+        ['CHANGES_REQUESTED', 'Waiting on Author (Feedback)', 'bg-amber-400', 'Reviewer requested changes or commented after author’s last push'],
+        ['CI_FAILURE', 'CI Failure (Author)', 'bg-rose-400', 'Latest commit status check rollup is FAILURE'],
+        ['CONFLICTING', 'Merge Conflict (Author)', 'bg-orange-400', 'GitHub mergeable state is CONFLICTING'],
+        ['DRAFT', 'Draft', 'bg-slate-500', 'Marked as draft / work in progress'],
+      ];
+      const triageSum = statusEntries.reduce((acc, [k]) => acc + (sb[k] || 0), 0);
+      const sumTag = document.getElementById('overviewTriageSumTag');
+      if (sumTag) sumTag.textContent = `${triageSum.toLocaleString()} / ${(d.total_open_prs || 0).toLocaleString()} (100%)`;
+
+      document.getElementById('overviewStatusBars').innerHTML = statusEntries.map(([key, label, barCls, tip]) => {
+        const cnt = sb[key] || 0;
+        const pct = ((cnt / total) * 100);
+        const pctDisp = cnt > 0 && pct < 1 ? '<1%' : `${Math.round(pct)}%`;
+        return `
+          <div title="${esc(tip)}">
+            <div class="flex justify-between text-[11px] mb-1">
+              <span class="text-slate-300">${label}</span>
+              <span class="font-mono text-slate-400">${cnt.toLocaleString()} (${pctDisp})</span>
+            </div>
+            <div class="h-1.5 rounded-full bg-dark-950 overflow-hidden"><div class="h-full ${barCls}" style="width:${Math.min(100, pct).toFixed(1)}%"></div></div>
+          </div>`;
+      }).join('');
+
+      // 4C. Strictly Reconciled "Whose Move Is It?" (Exact partition summing to total_open_prs)
+      document.getElementById('overviewWaitingBars').innerHTML = [
+        {
+          k: 'REVIEWER',
+          lbl: 'On Reviewer',
+          sub: `${wd.reviewer_active} active + ${wd.reviewer_stale} stale PRs ≥14d`,
+          tip: 'Waiting on Review (<14d) + Stale PRs (≥14d) where ball is still on reviewer',
+          cls: 'text-cyan-300 bg-cyan-500/10 border border-cyan-500/20',
+        },
+        {
+          k: 'AUTHOR',
+          lbl: 'On Author',
+          sub: `${wd.author_ci_or_conflict} CI/conflict + ${wd.author_feedback} feedback`,
+          tip: 'CI failures + merge conflicts + changes requested / unaddressed review feedback',
+          cls: 'text-amber-300 bg-amber-500/10 border border-amber-500/20',
+        },
+        {
+          k: 'MERGE',
+          lbl: 'Ready to Merge',
+          sub: 'matches Triage exactly',
+          tip: 'Approved + CI green/pending + non-conflicting + stack-unblocked + non-draft (includes mergeable: UNKNOWN)',
+          cls: 'text-emerald-300 bg-emerald-500/10 border border-emerald-500/20',
+        },
+        {
+          k: 'NONE',
+          lbl: 'Draft / Stack',
+          sub: `${wd.draft} draft + ${wd.stack_blocked} stack`,
+          tip: 'Draft PRs + PRs blocked on open upstream stack dependencies',
+          cls: 'text-slate-300 bg-slate-800/80 border border-slate-700/60',
+        },
+      ].map(t => `
+        <div class="rounded-lg p-2.5 ${t.cls} text-center" title="${esc(t.tip)}">
+          <div class="text-base font-bold font-mono">${(wb[t.k] || 0).toLocaleString()}</div>
+          <div class="text-[11px] font-semibold">${t.lbl}</div>
+          <div class="text-[9px] opacity-80 font-mono mt-0.5">${esc(t.sub)}</div>
+        </div>
+      `).join('');
+
+      // 5A. Actionable Reviewer Queues (Primary = Actionable Now, Secondary = Raw Pending & Stale Requests >30d)
+      const covEl = document.getElementById('overviewReviewerCoverage');
+      const cov = d.reviewer_coverage;
+      if (covEl && cov) {
+        covEl.title = 'No active reviewer request = neither an individual user nor a @team is currently in GitHub reviewRequests (e.g. a prior review cleared the request before the author pushed a follow-up, or no CODEOWNERS rule matched).';
+        covEl.innerHTML = `Reconciles to <strong class="text-cyan-300">${(cov.on_reviewer_total || 0).toLocaleString()} On Reviewer</strong>: <strong class="text-slate-200">${(cov.with_individual_reviewer || 0).toLocaleString()}</strong> individual-requested · <strong class="text-violet-300">${(cov.team_only_reviewer || 0).toLocaleString()}</strong> @team-only · <strong class="text-slate-300">${(cov.unassigned_reviewer || 0).toLocaleString()}</strong> no active reviewer request <span class="text-slate-500">(neither user nor team; multi-reviewer PRs count in each queue)</span>`;
+      }
+      document.getElementById('overviewReviewers').innerHTML = (d.top_reviewer_load || []).map(r => {
+        const act = r.actionable_pending ?? 0;
+        const actStale = r.actionable_stale_30d ?? 0;
+        const raw = r.pending_requests ?? 0;
+        const rawStale = r.stale_pending_30d ?? 0;
+        const oldest = (r.oldest_actionable_days || r.oldest_pending_days || 0).toFixed(0);
+        return `
+          <div onclick="selectReviewer('${esc(r.reviewer)}'); navClick(event, 'reviewers');" class="cursor-pointer bg-dark-950 border border-slate-800 hover:border-violet-500/40 rounded-lg p-3 flex flex-wrap items-center justify-between gap-2 transition">
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="font-mono text-xs font-bold text-violet-300 hover:underline">${esc(r.reviewer)}</span>
+                ${actStale > 0 ? `<span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30" title="Actionable review requests waiting >30 days (counted inside actionable)">${actStale} overdue req (&gt;30d)</span>` : ''}
+              </div>
+              <div class="text-[10px] text-slate-500 font-mono mt-0.5">${raw.toLocaleString()} raw pending · ${rawStale.toLocaleString()} stale req (&gt;30d) · oldest ${oldest}d</div>
+            </div>
+            <span class="text-xs font-mono font-bold px-2.5 py-1 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30" title="Non-draft, unblocked, CI green/pending PRs waiting on this reviewer — includes overdue >30d requests">${act.toLocaleString()} actionable</span>
+          </div>`;
+      }).join('') || '<span class="text-xs text-slate-500 italic">No reviewer data yet.</span>';
+
+      // 5B. Hottest Contended Files
+      document.getElementById('overviewHotspots').innerHTML = (d.top_hotspot_files || []).map(h => `
+        <a href="${pageHref('collisions', { file: h.path })}"
+           data-collision-file="${esc(h.path)}"
+           class="overview-hotspot-link bg-dark-950 border border-slate-800 hover:border-slate-600 rounded-lg p-3 flex items-center justify-between gap-3 block">
+          <span class="font-mono text-xs text-slate-200 truncate" title="${esc(h.path)}">${esc(h.path)}</span>
+          <span class="shrink-0 text-[11px] font-mono text-rose-400 font-semibold">${h.pr_count} PRs${h.active_prs_count ? ` (${h.active_prs_count} active)` : ''} · ${h.churn} churn</span>
+        </a>
+      `).join('');
+      document.querySelectorAll('#overviewHotspots .overview-hotspot-link').forEach(link => {
+        link.addEventListener('click', evt => {
+          if (evt.metaKey || evt.ctrlKey || evt.shiftKey || evt.altKey) return;
+          activeCollisionFile = link.dataset.collisionFile || '';
+          navClick(evt, 'collisions');
+        });
+      });
+    }
+
+    // PAGE 1: Dependency DAG
+    async function fetchDag() {
+      try {
+        const res = await apiFetch('/dag', {
+          scope: dagScope,
+          subsystem: currentFilter !== 'ALL' ? currentFilter : null,
+        });
+        const data = await res.json();
+        lastDagData = data;
+        document.getElementById('dagStacksCount').textContent = data.chains ? data.chains.length : 0;
+        renderDag(data);
+      } catch (e) {
+        console.error('Error fetching DAG:', e);
+      }
+    }
+
+    function dagCard(n, role) {
+      const external = n.is_external;
+      const border = role === 'base' ? 'border-emerald-500/40' : 'border-fuchsia-500/30';
+      const roleLabel = role === 'base'
+        ? (n.state === 'MERGED' ? '<span class="text-emerald-400 font-bold">✓ ALREADY MERGED</span>'
+           : n.state === 'CLOSED' ? '<span class="text-rose-400 font-bold">✗ CLOSED, NOT MERGED</span>'
+           : '<span class="text-emerald-400 font-bold">① MERGE THIS FIRST</span>')
+        : `<span class="text-fuchsia-300 font-bold">⏸ WAITS ON ${(n.blocked_by && n.blocked_by.length) ? n.blocked_by.map(b => '#' + b).join(', ') : 'PR above'}</span>`;
+      return `
+        <div class="bg-dark-950 border ${border} rounded-xl p-3 w-full shadow-md ${external ? 'opacity-90' : 'cursor-pointer hover:border-slate-500'}" ${external ? '' : `onclick="openDrawer(${n.id})"`}>
+          <div class="flex items-center justify-between text-[11px] gap-1">
+            ${roleLabel}
+            <span class="flex items-center gap-1 shrink-0">
+              ${n.is_external ? '' : riskBadge(n)}
+              ${ghLink(n.id, 'text-slate-400 hover:text-white text-sm')}
+            </span>
+          </div>
+          <div class="mt-1.5 flex items-center gap-2">
+            <a href="${prUrl(n.id)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="font-mono font-bold text-cyan-400 hover:underline">#${n.id}</a>
+            <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold border ${statusClass(n.status)}">${esc(n.status)}</span>
+          </div>
+          <p class="text-xs text-slate-200 mt-1.5 line-clamp-2" title="${esc(n.title || '')}">${esc(n.title || '')}</p>
+          <div class="mt-1.5 text-[10px] text-slate-400 flex items-center justify-between">
+            <span>by <strong>${esc(n.author)}</strong></span>
+            ${n.is_external ? '' : `<span>${n.ci_status === 'SUCCESS' ? '<span class="text-emerald-400">CI ✓</span>' : n.ci_status === 'FAILURE' ? '<span class="text-rose-400">CI ✗</span>' : '<span class="text-amber-400">CI ⋯</span>'} · ${(n.staleness_days || 0).toFixed(0)}d idle</span>`}
+          </div>
+          ${n.reason ? `<p class="text-[10px] text-slate-500 mt-1.5 italic">↳ ${esc(n.reason)}</p>` : ''}
+        </div>`;
+    }
+
+    function matchesSearchNode(n) {
+      if (!searchQuery) return true;
+      return String(n.id).includes(searchQuery)
+        || (n.title || '').toLowerCase().includes(searchQuery)
+        || (n.author || '').toLowerCase().includes(searchQuery);
+    }
+
+    function renderDag(data) {
+      const box = document.getElementById('dagContainer');
+      if (!box) return;
+      const nodeMap = {};
+      (data.nodes || []).forEach(n => { nodeMap[n.id] = n; });
+      const cycleSet = new Set();
+      (data.cycles || []).forEach(c => c.forEach(id => cycleSet.add(id)));
+
+      let chains = [...(data.chains || [])];
+      if (searchQuery) {
+        chains = chains.filter(c => c.some(num => matchesSearchNode(nodeMap[num] || { id: num, title: '', author: '' })));
+      }
+      if (document.getElementById('dagCyclesOnly')?.checked) {
+        chains = chains.filter(c => c.some(num => cycleSet.has(num)));
+      }
+
+      const sortMode = document.getElementById('dagSortSelect')?.value || 'length';
+      chains.sort((a, b) => {
+        if (sortMode === 'cycles') {
+          const ca = a.some(n => cycleSet.has(n)) ? 1 : 0;
+          const cb = b.some(n => cycleSet.has(n)) ? 1 : 0;
+          if (cb !== ca) return cb - ca;
+        } else if (sortMode === 'ready') {
+          const ra = nodeMap[a[0]]?.status === 'READY_TO_MERGE' ? 1 : 0;
+          const rb = nodeMap[b[0]]?.status === 'READY_TO_MERGE' ? 1 : 0;
+          if (rb !== ra) return rb - ra;
+        } else if (sortMode === 'risk') {
+          const maxRisk = c => Math.max(...c.map(n => nodeMap[n]?.risk_score || 0));
+          const diff = maxRisk(b) - maxRisk(a);
+          if (diff !== 0) return diff;
+        }
+        return b.length - a.length;
+      });
+
+      const inChain = new Set();
+      (data.chains || []).forEach(c => c.forEach(n => inChain.add(n)));
+
+      let html = '';
+      if (!chains.length) {
+        html += '<p class="text-slate-500 text-xs italic">No matching dependency stacks found.</p>';
+      } else {
+        html += '<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-5 items-start">';
+        chains.forEach((chain, i) => {
+          const hasCycle = chain.some(num => cycleSet.has(num));
+          html += `<div class="bg-dark-900/70 border border-slate-800/80 rounded-xl p-3 flex flex-col items-center">
+            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold mb-2.5 flex items-center justify-between w-full px-1">
+              <span>Stack ${i + 1} · ${chain.length} PRs</span>
+              ${hasCycle ? '<span class="px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30">⚠ CYCLE</span>' : '<span class="text-slate-500">merge order ↓</span>'}
+            </div>`;
+          chain.forEach((num, j) => {
+            const n = nodeMap[num] || { id: num, title: `PR #${num}`, author: 'unknown', status: 'UNKNOWN', is_external: true };
+            const role = j === 0 ? 'base' : (j === chain.length - 1 ? 'tip' : 'mid');
+            if (j > 0) html += `<div class="flex items-center gap-1 text-fuchsia-400 my-1 text-[10px] font-mono"><i class="ph-bold ph-arrow-down text-sm"></i><span>depends on</span></div>`;
+            html += dagCard(n, role);
+          });
+          html += '</div>';
+        });
+        html += '</div>';
+      }
+
+      if (data.scope === 'all') {
+        const solo = (data.nodes || []).filter(n => !inChain.has(n.id) && matchesSearchNode(n));
+        const visibleSolo = solo.slice(0, soloShowLimit);
+        html += `<div class="mt-8 border-t border-slate-800 pt-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Independent PRs · ${solo.length} (showing ${visibleSolo.length})</div>
+            ${solo.length > visibleSolo.length ? `<button onclick="soloShowLimit += 120; renderDag(lastDagData)" class="text-xs px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200">Show 120 more</button>` : ''}
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">` +
+          visibleSolo.map(n => `<div onclick="openDrawer(${n.id})" class="cursor-pointer bg-dark-950 border border-slate-800 hover:border-slate-600 rounded-lg px-2.5 py-2 text-xs flex items-center gap-2">
+              <a href="${prUrl(n.id)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="font-mono font-bold text-cyan-400 hover:underline shrink-0">#${n.id}</a>
+              <span class="px-1 rounded text-[9px] font-mono shrink-0 ${riskClass(n.risk_level)}">${n.risk_score}</span>
+              <span class="truncate text-slate-300">${esc(n.title)}</span>
+            </div>`).join('') +
+          '</div></div>';
+      }
+      box.innerHTML = html;
+    }
+
+    // PAGE 2: Collisions & Hotspots (Uncramped Cards + Click-to-Filter)
+    function toggleShowAllHotspots() {
+      showAllHotspots = !showAllHotspots;
+      renderHotspots();
+    }
+
+    function toggleHotspotExpand(path, evt) {
+      if (evt) evt.stopPropagation();
+      if (expandedHotspots.has(path)) expandedHotspots.delete(path);
+      else expandedHotspots.add(path);
+      renderHotspots();
+    }
+
+    function filterCollisionsByFile(path) {
+      activeCollisionFile = (activeCollisionFile === path) ? '' : path;
+      syncBrowserUrl(false);
+      renderHotspots();
+      fetchCollisions();
+    }
+
+    function clearCollisionFileFilter() {
+      activeCollisionFile = '';
+      syncBrowserUrl(false);
+      renderHotspots();
+      fetchCollisions();
+    }
+
+    async function fetchHotspots() {
+      try {
+        const res = await apiFetch('/hotspots', {
+          subsystem: currentFilter !== 'ALL' ? currentFilter : null,
+        });
+        lastHotspots = await res.json();
+        document.getElementById('hotspotsCountBadge').textContent = lastHotspots.length;
+        renderHotspots();
+      } catch (e) {
+        console.error('Error fetching hotspots:', e);
+      }
+    }
+
+    function renderHotspots() {
+      const container = document.getElementById('hotspotContainer');
+      const btn = document.getElementById('toggleMoreHotspotsBtn');
+      const items = showAllHotspots ? lastHotspots : lastHotspots.slice(0, 6);
+      if (lastHotspots.length > 6) {
+        btn.classList.remove('hidden');
+        btn.textContent = showAllHotspots ? 'Show top 6' : `Show all ${lastHotspots.length} hotspots`;
+      } else {
+        btn.classList.add('hidden');
+      }
+
+      container.innerHTML = '';
+      items.forEach(h => {
+        const isSelected = activeCollisionFile === h.path;
+        const isExpanded = expandedHotspots.has(h.path);
+        const orderedPrs = h.recent_pr_numbers && h.recent_pr_numbers.length ? h.recent_pr_numbers : h.pr_numbers;
+        const limit = isExpanded ? orderedPrs.length : 8;
+        const shownPrs = orderedPrs.slice(0, limit);
+        const hiddenCount = orderedPrs.length - shownPrs.length;
+
+        const card = document.createElement('div');
+        card.className = `bg-dark-950 p-4 rounded-xl border transition cursor-pointer flex flex-col gap-2.5 ${isSelected ? 'border-emerald-500 ring-1 ring-emerald-500/40' : 'border-slate-800 hover:border-slate-700'}`;
+        card.onclick = () => filterCollisionsByFile(h.path);
+        card.innerHTML = `
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-rose-400 font-bold font-mono text-xs">${h.open_pr_count} Open PRs</span>
+            <span class="text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded text-[10px] font-mono border border-rose-500/20">🔥 ${h.active_prs_count} Active (&lt;5d)</span>
+          </div>
+          <div>
+            <p class="font-mono text-xs text-slate-100 font-semibold truncate" title="${esc(h.path)}">${esc(h.path)}</p>
+            <p class="text-[11px] text-slate-500 mt-1 font-mono">${h.total_churn.toLocaleString()} lines churn · newest ${h.min_idle_days.toFixed(0)}d idle</p>
+          </div>
+          <div class="flex flex-wrap gap-1.5 pt-1 border-t border-slate-800/80">
+            ${shownPrs.map(n => `
+              <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800/90 text-slate-300 inline-flex items-center gap-1 border border-slate-700/60">
+                <span onclick="event.stopPropagation(); openDrawer(${n})" class="cursor-pointer hover:text-emerald-300">#${n}</span>${ghLink(n)}
+              </span>
+            `).join('')}
+            ${hiddenCount > 0 ? `<button data-hotspot-toggle="1" class="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 hover:bg-emerald-500/20">+${hiddenCount} more</button>` : ''}
+            ${isExpanded && orderedPrs.length > 8 ? `<button data-hotspot-toggle="1" class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-400 hover:text-white">Show less</button>` : ''}
+          </div>
+        `;
+        card.querySelectorAll('[data-hotspot-toggle]').forEach(toggleBtn => {
+          toggleBtn.addEventListener('click', evt => toggleHotspotExpand(h.path, evt));
+        });
+        container.appendChild(card);
+      });
+    }
+
+    async function fetchCollisions() {
+      const pill = document.getElementById('activeFileFilterPill');
+      if (activeCollisionFile) {
+        pill.classList.remove('hidden');
+        pill.classList.add('inline-flex');
+        document.getElementById('activeFileFilterLabel').textContent = `File: ${activeCollisionFile}`;
+      } else {
+        pill.classList.add('hidden');
+        pill.classList.remove('inline-flex');
+      }
+
+      try {
+        const res = await apiFetch('/collisions', {
+          limit: 100,
+          subsystem: currentFilter !== 'ALL' ? currentFilter : null,
+          live_only: document.getElementById('liveOnlyToggle')?.checked ? 'true' : null,
+          min_risk: document.getElementById('minRiskCollisionSelect')?.value || null,
+          file: activeCollisionFile || null,
+          search: searchQuery || null,
+        });
+        const collisions = await res.json();
+        document.getElementById('collisionsCountBadge').textContent = collisions.length;
+
+        const tableBody = document.getElementById('collisionTableBody');
+        tableBody.innerHTML = '';
+
+        if (!collisions.length) {
+          tableBody.innerHTML = '<tr><td colspan="7" class="py-6 text-center text-slate-500 italic font-sans">No collisions match the current filters.</td></tr>';
+          return;
+        }
+
+        collisions.forEach(c => {
+          const tr = document.createElement('tr');
+          tr.className = "hover:bg-dark-850/60 transition cursor-pointer";
+          tr.onclick = () => openDrawer(c.pr_a);
+
+          const dynamicsBadge = c.is_live_race
+            ? '<span class="text-rose-400 font-bold bg-rose-500/15 px-2 py-0.5 rounded border border-rose-500/30">🔥 LIVE RACE (&lt;5d)</span>'
+            : `<span class="text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">⚠️ Stale (${c.pr_b_idle_days.toFixed(0)}d)</span>`;
+
+          tr.innerHTML = `
+            <td class="py-2.5 px-3 whitespace-nowrap">
+              <span class="text-cyan-400 font-bold">#${c.pr_a}</span> ${ghLink(c.pr_a)}
+              <span class="text-[10px] text-slate-400 ml-1">(${c.pr_a_idle_days.toFixed(0)}d)</span>
+            </td>
+            <td class="py-2.5 px-3 whitespace-nowrap">
+              <span class="text-cyan-400 font-bold" onclick="event.stopPropagation(); openDrawer(${c.pr_b})">#${c.pr_b}</span> ${ghLink(c.pr_b)}
+              <span class="text-[10px] text-slate-400 ml-1">(${c.pr_b_idle_days.toFixed(0)}d)</span>
+            </td>
+            <td class="py-2.5 px-3 font-sans whitespace-nowrap">${dynamicsBadge}</td>
+            <td class="py-2.5 px-3 font-sans"><span class="text-rose-400 font-bold bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/30">${esc(c.risk_level)}</span></td>
+            <td class="py-2.5 px-3 text-slate-300">${c.collision_score.toFixed(2)}</td>
+            <td class="py-2.5 px-3 text-slate-300 whitespace-nowrap">${c.shared_churn} lines</td>
+            <td class="py-2.5 px-3 text-slate-400 text-[11px] truncate max-w-sm font-sans" title="${esc(c.overlapping_files.join(', '))}">${esc(c.overlapping_files.join(', '))}</td>
+          `;
+          tableBody.appendChild(tr);
+        });
+      } catch (e) {
+        console.error('Error fetching collisions:', e);
+      }
+    }
+
+    // PAGE 3: Triage Board
+    function toggleTriageCompact() {
+      triageCompact = !triageCompact;
+      document.getElementById('triageCompactBtn').textContent = `Compact cards: ${triageCompact ? 'On' : 'Off'}`;
+      fetchTriage();
+    }
+
+    async function fetchTriage() {
+      try {
+        const res = await apiFetch('/triage', {
+          subsystem: currentFilter !== 'ALL' ? currentFilter : null,
+          search: searchQuery || null,
+        });
+        const cols = await res.json();
+
+        const colReady = document.getElementById('colReadyList');
+        const colBlocked = document.getElementById('colBlockedList');
+        const colReview = document.getElementById('colReviewList');
+        const colAuthor = document.getElementById('colAuthorList');
+        const colFail = document.getElementById('colFailList');
+        const colDraft = document.getElementById('colDraftList');
+
+        [colReady, colBlocked, colReview, colAuthor, colFail, colDraft].forEach(c => c.innerHTML = '');
+
+        const totals = cols._totals || {};
+        function populateCol(listElem, prs, countElemId, key) {
+          const total = totals[key] != null ? totals[key] : prs.length;
+          document.getElementById(countElemId).textContent = total > prs.length ? `${prs.length} of ${total}` : total;
+          prs.forEach(pr => {
+            const card = document.createElement('div');
+            card.className = `bg-dark-950 ${triageCompact ? 'p-2' : 'p-3'} rounded-lg border border-slate-800/80 hover:border-slate-700 transition cursor-pointer shadow-sm`;
+            card.onclick = () => openDrawer(pr.number);
+
+            const ciIcon = pr.ci_status === 'SUCCESS' ? '<span class="text-emerald-400 font-bold">✓ CI</span>' :
+                           (pr.ci_status === 'FAILURE' ? '<span class="text-rose-400 font-bold">✗ CI</span>' : '<span class="text-amber-400 font-bold">⋯ CI</span>');
+
+            const idleBadge = pr.staleness_days >= 14
+              ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-rose-500/15 text-rose-300 border border-rose-500/20">${pr.staleness_days.toFixed(0)}d stale</span>`
+              : `<span class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-300">⚡ ${pr.staleness_days.toFixed(0)}d</span>`;
+
+            card.innerHTML = `
+              <div class="flex items-center justify-between text-[11px]">
+                <span class="flex items-center gap-1.5"><a href="${esc(pr.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="font-mono font-bold text-cyan-400 hover:underline">#${pr.number}</a>${ghLink(pr.number)}</span>
+                <span class="flex items-center gap-1.5">${riskBadge(pr)}${ciIcon}</span>
+              </div>
+              <p class="font-semibold text-slate-200 mt-1.5 text-xs ${triageCompact ? 'truncate' : 'line-clamp-2'}">${esc(pr.title)}</p>
+              ${triageCompact ? '' : `
+                <div class="mt-2.5 flex items-center justify-between gap-1 text-[10px] text-slate-400">
+                  <span class="truncate">by <strong>${esc(pr.author)}</strong></span>
+                  <span class="flex items-center gap-1 shrink-0">${waitingBadge(pr.review_flow)}${idleBadge}</span>
+                </div>`}
+            `;
+            listElem.appendChild(card);
+          });
+        }
+
+        populateCol(colReady, cols.ready_to_merge, 'colCountReady', 'ready_to_merge');
+        populateCol(colBlocked, cols.blocked_by_dep, 'colCountBlocked', 'blocked_by_dep');
+        populateCol(colReview, cols.waiting_review, 'colCountReview', 'waiting_review');
+        populateCol(colAuthor, cols.waiting_author || [], 'colCountAuthor', 'waiting_author');
+        populateCol(colFail, cols.failing_ci, 'colCountFail', 'failing_ci');
+        populateCol(colDraft, cols.draft, 'colCountDraft', 'draft');
+      } catch (e) {
+        console.error('Error fetching triage:', e);
+      }
+    }
+
+    // PAGE 4: Reviewer Load & Action Inbox
+    const BUCKET_METADATA = {
+      ready_decision: {
+        desc: "🟢 Ready for Decision — CI passing/green, author addressed comments, and unblocked. Ball is in your court to review or approve.",
+        empty: "No PRs currently awaiting review with green CI.",
+        color: "emerald",
+      },
+      stack_unblockers: {
+        desc: "⚡ High-Leverage Unblockers — Base PRs that block 1 or more downstream PRs. Stamping these unblocks team velocity.",
+        empty: "No stacked base PRs currently pending your review.",
+        color: "fuchsia",
+      },
+      quick_wins: {
+        desc: "⏱️ Quick Wins — Small diffs (<60 lines or <=3 files) or low change risk with green CI. Fast 5-minute review candidates.",
+        empty: "No quick-win PRs currently in queue.",
+        color: "cyan",
+      },
+      stale_or_author: {
+        desc: "💤 Waiting on Author / Stale CI — Changes requested, failing CI, draft, or inactive for 45+ days. Safe to skip or ping author.",
+        empty: "No author-blocked or stale PRs in your queue.",
+        color: "amber",
+      },
+      all_pending: {
+        desc: "📋 All Pending Requests — All open PRs where your review is requested, ranked by change-risk score.",
+        empty: "No pending review requests.",
+        color: "slate",
+      },
+    };
+
+    async function selectReviewer(handle) {
+      if (!handle) return;
+      selectedReviewer = handle.trim();
+      const card = document.getElementById('reviewerInboxCard');
+      if (card) {
+        card.classList.remove('hidden');
+        card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      syncBrowserUrl(false);
+      await loadReviewerInbox(selectedReviewer);
+      document.querySelectorAll('#reviewerTableBody tr').forEach(tr => {
+        const isCur = tr.dataset.reviewerName && tr.dataset.reviewerName.toLowerCase() === selectedReviewer.toLowerCase();
+        tr.className = `hover:bg-dark-850/60 transition cursor-pointer ${isCur ? 'bg-violet-500/10 ring-1 ring-violet-500/40' : ''}`;
+      });
+    }
+
+    function clearSelectedReviewer() {
+      selectedReviewer = '';
+      lastInboxData = null;
+      const card = document.getElementById('reviewerInboxCard');
+      if (card) card.classList.add('hidden');
+      syncBrowserUrl(false);
+      document.querySelectorAll('#reviewerTableBody tr').forEach(tr => {
+        tr.className = "hover:bg-dark-850/60 transition cursor-pointer";
+      });
+    }
+
+    async function loadReviewerInbox(handle) {
+      const card = document.getElementById('reviewerInboxCard');
+      if (!card) return;
+      card.classList.remove('hidden');
+      document.getElementById('inboxReviewerName').textContent = `@${handle}`;
+      document.getElementById('inboxGhLink').href = `https://github.com/${encodeURIComponent(handle)}`;
+      document.getElementById('inboxPrTableBody').innerHTML = `<tr><td colspan="6" class="py-8 text-center text-slate-500 italic font-sans">Analyzing review queues, stacks &amp; diffs for @${esc(handle)}...</td></tr>`;
+
+      try {
+        const res = await apiFetch(`/reviewers/${encodeURIComponent(handle)}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        lastInboxData = data;
+
+        const s = data.summary || {};
+        const actCount = s.actionable_pending ?? (data.counts && data.counts.ready_decision) ?? 0;
+        const actStale = s.actionable_stale_30d ?? 0;
+        const rawStale = s.stale_pending_30d ?? 0;
+        const oldestAct = (s.oldest_actionable_days || s.oldest_pending_days || 0).toFixed(0);
+        document.getElementById('inboxStatChips').innerHTML = `
+          <span class="px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-300"><strong class="text-emerald-200">${actCount}</strong> actionable now${actStale > 0 ? ` (${actStale} &gt;30d overdue)` : ''}</span>
+          <span class="px-2 py-0.5 rounded bg-dark-950 border border-slate-800 text-slate-300"><strong class="text-amber-300">${s.pending_requests ?? 0}</strong> raw pending · <strong class="text-slate-400">${rawStale}</strong> stale &gt;30d</span>
+          <span class="px-2 py-0.5 rounded bg-dark-950 border border-slate-800 text-slate-300"><strong class="text-slate-200">${oldestAct}d</strong> oldest wait</span>
+          <span class="px-2 py-0.5 rounded bg-dark-950 border border-slate-800 text-slate-300"><strong class="text-emerald-400">${s.approvals ?? 0}</strong> approved · <strong class="text-rose-400">${s.changes_requested ?? 0}</strong> changes req</span>
+        `;
+
+        const counts = data.counts || {};
+        document.getElementById('badge_ready_decision').textContent = counts.ready_decision ?? 0;
+        document.getElementById('badge_stack_unblockers').textContent = counts.stack_unblockers ?? 0;
+        document.getElementById('badge_quick_wins').textContent = counts.quick_wins ?? 0;
+        document.getElementById('badge_stale_or_author').textContent = counts.stale_or_author ?? 0;
+        document.getElementById('badge_all_pending').textContent = counts.all_pending ?? 0;
+
+        switchInboxBucket(activeInboxBucket || 'ready_decision');
+      } catch (e) {
+        console.error('Failed to load reviewer inbox:', e);
+        document.getElementById('inboxPrTableBody').innerHTML = `<tr><td colspan="6" class="py-6 text-center text-rose-400 font-sans">Failed to load inbox for @${esc(handle)}</td></tr>`;
+      }
+    }
+
+    function switchInboxBucket(bucketKey) {
+      activeInboxBucket = bucketKey;
+      const tabMeta = BUCKET_METADATA[bucketKey] || BUCKET_METADATA.ready_decision;
+      const colorStyles = {
+        emerald: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
+        fuchsia: "bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/40",
+        cyan: "bg-cyan-500/20 text-cyan-300 border-cyan-500/40",
+        amber: "bg-amber-500/20 text-amber-300 border-amber-500/40",
+        slate: "bg-slate-700/50 text-white border-slate-600",
+      };
+
+      document.querySelectorAll('.inbox-tab').forEach(btn => {
+        btn.className = "inbox-tab px-3 py-2 rounded-lg text-xs font-semibold bg-dark-850 text-slate-400 hover:text-white border border-slate-800 transition flex items-center gap-2";
+      });
+
+      const activeBtn = document.getElementById(`tab_${bucketKey}`);
+      if (activeBtn) {
+        activeBtn.className = `inbox-tab px-3 py-2 rounded-lg text-xs font-semibold ${colorStyles[tabMeta.color] || colorStyles.emerald} border transition flex items-center gap-2`;
+      }
+
+      renderInboxBucket(bucketKey);
+    }
+
+    function renderInboxBucket(bucketKey) {
+      if (!lastInboxData) return;
+      const meta = BUCKET_METADATA[bucketKey] || BUCKET_METADATA.ready_decision;
+      const prs = (lastInboxData.buckets && lastInboxData.buckets[bucketKey]) || [];
+
+      document.getElementById('inboxBucketDescText').textContent = meta.desc;
+      document.getElementById('inboxBucketCountTag').textContent = `Showing ${prs.length} PRs`;
+
+      const tbody = document.getElementById('inboxPrTableBody');
+      if (!prs.length) {
+        tbody.innerHTML = `<tr><td colspan="6" class="py-8 text-center text-slate-500 italic font-sans">${meta.empty}</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = prs.map(pr => {
+        const ciBadge = pr.ci_status === 'SUCCESS' ? '<span class="text-emerald-400 font-bold font-mono">✓ CI Pass</span>' :
+                        (pr.ci_status === 'FAILURE' ? '<span class="text-rose-400 font-bold font-mono">✗ CI Fail</span>' : '<span class="text-amber-400 font-bold font-mono">⋯ CI</span>');
+
+        const lines = pr.lines_changed != null ? `${pr.lines_changed} lines` : `${pr.files_changed_count || 0} files`;
+        const files = `${pr.files_changed_count || 0} files`;
+        const blocksCount = (pr.blocks || []).length;
+        const stackBadge = blocksCount > 0
+          ? `<span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-fuchsia-500/15 text-fuchsia-300 border border-fuchsia-500/30">⚡ Blocks ${blocksCount} PR${blocksCount > 1 ? 's' : ''}</span>`
+          : (pr.blocked_by && pr.blocked_by.length ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-amber-500/15 text-amber-300 border border-amber-500/20">Blocked</span>` : '<span class="text-slate-500 text-[10px]">Standalone</span>');
+
+        const idleStr = pr.staleness_days >= 30
+          ? `<span class="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 font-mono text-[10px]">⏰ ${pr.staleness_days.toFixed(0)}d overdue</span>`
+          : (pr.staleness_days >= 14
+            ? `<span class="text-rose-300 font-mono text-[10px]">${pr.staleness_days.toFixed(0)}d stale</span>`
+            : `<span class="text-emerald-400 font-mono text-[10px]">⚡ ${pr.staleness_days.toFixed(0)}d active</span>`);
+
+        const filesUrl = pr.url ? `${pr.url}/files` : `https://github.com/vllm-project/vllm/pull/${pr.number}/files`;
+
+        return `
+          <tr class="hover:bg-dark-850/60 transition cursor-pointer" onclick="openDrawer(${pr.number})">
+            <td class="py-3 px-3 whitespace-nowrap">
+              <div class="flex items-center gap-1.5 font-mono">
+                <span class="font-bold text-cyan-400 hover:underline">#${pr.number}</span>
+                ${ghLink(pr.number)}
+              </div>
+            </td>
+            <td class="py-3 px-3 max-w-md">
+              <p class="font-semibold text-slate-100 hover:text-emerald-300 transition line-clamp-1">${esc(pr.title)}</p>
+              <p class="text-[11px] text-slate-400 mt-0.5 truncate">${esc(pr.reason || pr.status)}</p>
+            </td>
+            <td class="py-3 px-3 whitespace-nowrap text-slate-300">
+              <div class="text-xs">by <strong class="text-white">${esc(pr.author)}</strong></div>
+              <div class="mt-0.5">${idleStr}</div>
+            </td>
+            <td class="py-3 px-3 whitespace-nowrap">
+              <div>${ciBadge}</div>
+              <div class="mt-1">${riskBadge(pr)}</div>
+            </td>
+            <td class="py-3 px-3 whitespace-nowrap text-slate-300">
+              <div class="font-mono text-[11px]">${files} · ${lines}</div>
+              <div class="mt-1">${stackBadge}</div>
+            </td>
+            <td class="py-3 px-3 text-right whitespace-nowrap" onclick="event.stopPropagation()">
+              <div class="flex items-center justify-end gap-1.5">
+                <a href="${esc(filesUrl)}" target="_blank" rel="noopener" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 text-[11px] font-semibold transition inline-flex items-center gap-1" title="Open Files Changed diff on GitHub">
+                  <i class="ph ph-files"></i> Diff
+                </a>
+                <button onclick="navClick(event, 'simulator'); runSimulation(${pr.number});" class="px-2 py-1 rounded bg-fuchsia-600/20 hover:bg-fuchsia-600/30 text-fuchsia-300 hover:text-white border border-fuchsia-500/40 text-[11px] font-semibold transition inline-flex items-center gap-1" title="Simulate Merge Impact">
+                  <i class="ph ph-lightning"></i> Sim
+                </button>
+                <button onclick="openDrawer(${pr.number})" class="px-2 py-1 rounded bg-dark-850 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 text-[11px] font-semibold transition" title="Open PR Dossier Drawer">
+                  Drawer
+                </button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function fetchReviewers() {
+      try {
+        const incTeamsEl = document.getElementById('includeTeamsToggle');
+        const includeTeams = incTeamsEl ? incTeamsEl.checked : false;
+        const res = await apiFetch('/reviewers', {
+          limit: 100,
+          search: searchQuery || null,
+          include_teams: includeTeams ? 'true' : 'false',
+        });
+        const rows = await res.json();
+        document.getElementById('colCountReviewers').textContent = rows.length;
+        if (lastOverview) {
+          const w = lastOverview.waiting_on_breakdown || {};
+          document.getElementById('reviewerWaitingSummary').textContent =
+            `Waiting on: reviewer ${w.REVIEWER || 0} · author ${w.AUTHOR || 0} · merge ${w.MERGE || 0} · median reviewer wait ${lastOverview.median_reviewer_wait_days ?? 0}d`;
+        }
+
+        const queryHandle = selectedReviewer || (searchQuery && rows.some(r => r.reviewer.toLowerCase() === searchQuery.toLowerCase()) ? searchQuery : '');
+        if (queryHandle) {
+          await selectReviewer(queryHandle);
+        }
+
+        const tbody = document.getElementById('reviewerTableBody');
+        if (!rows.length) {
+          tbody.innerHTML = '<tr><td colspan="8" class="py-6 text-center text-slate-500 italic font-sans">No review data matches. Sync GitHub to load review requests.</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = rows.map(r => {
+          const isSelected = selectedReviewer && selectedReviewer.toLowerCase() === r.reviewer.toLowerCase();
+          const isTeam = Boolean(r.is_team || (r.reviewer || '').startsWith('@team/'));
+          const act = r.actionable_pending ?? 0;
+          const actStale = r.actionable_stale_30d ?? 0;
+          const raw = r.pending_requests ?? 0;
+          const rawStale = r.stale_pending_30d ?? 0;
+          const oldestAct = r.oldest_actionable_days || r.oldest_pending_days || 0;
+          return `
+            <tr data-reviewer-name="${esc(r.reviewer)}" class="hover:bg-dark-850/60 transition cursor-pointer ${isSelected ? 'bg-violet-500/10 ring-1 ring-violet-500/40' : ''}" onclick="selectReviewer('${esc(r.reviewer)}')">
+              <td class="py-2.5 px-3 font-mono font-bold text-violet-300 whitespace-nowrap">
+                <div class="flex items-center gap-1.5">
+                  <span class="hover:underline">${esc(r.reviewer)}</span>
+                  ${isTeam ? '<span class="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700 font-sans uppercase">team</span>' : ghUserLink(r.reviewer)}
+                </div>
+              </td>
+              <td class="py-2.5 px-3 text-right font-mono whitespace-nowrap">
+                <span class="font-bold ${act > 0 ? 'text-emerald-300' : 'text-slate-500'}">${act}</span>
+                ${actStale > 0 ? `<span class="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">${actStale} &gt;30d</span>` : ''}
+              </td>
+              <td class="py-2.5 px-3 text-right font-mono text-slate-400 whitespace-nowrap">
+                ${raw} <span class="text-[10px] text-slate-500">(${rawStale} &gt;30d)</span>
+              </td>
+              <td class="py-2.5 px-3 text-right font-mono text-slate-300">${oldestAct > 0 ? `${oldestAct.toFixed(0)}d` : '—'}</td>
+              <td class="py-2.5 px-3 text-right font-mono text-slate-300">${r.reviews_submitted}</td>
+              <td class="py-2.5 px-3 text-right font-mono text-emerald-400">${r.approvals}</td>
+              <td class="py-2.5 px-3 text-right font-mono text-rose-400">${r.changes_requested}</td>
+              <td class="py-2.5 px-3 text-right whitespace-nowrap" onclick="event.stopPropagation()">
+                <button onclick="selectReviewer('${esc(r.reviewer)}')" class="px-2.5 py-1 rounded bg-violet-600/20 hover:bg-violet-600/35 text-violet-300 hover:text-white border border-violet-500/40 text-[11px] font-semibold transition inline-flex items-center gap-1">
+                  <span>Open Inbox</span> <i class="ph-bold ph-arrow-right text-[10px]"></i>
+                </button>
+              </td>
+            </tr>`;
+        }).join('');
+      } catch (e) {
+        console.error('Error fetching reviewers:', e);
+      }
+    }
+
+    // PAGE 5: Merge Impact Simulator
+    async function populateSimulationOptions() {
+      try {
+        const res = await apiFetch('/dag', { scope: 'stacks' });
+        const data = await res.json();
+        const select = document.getElementById('simPrSelect');
+        select.innerHTML = '<option value="">Choose a stacked PR to simulate merge...</option>';
+        (data.nodes || []).forEach(n => {
+          const opt = document.createElement('option');
+          opt.value = n.id;
+          opt.textContent = `PR #${n.id}: ${n.title.slice(0, 70)} (${n.status})`;
+          select.appendChild(opt);
+        });
+      } catch (e) {
+        console.error('Error populating simulation:', e);
+      }
+    }
+
+    async function runSimulation(prNum) {
+      if (!prNum) return;
+      const errBox = document.getElementById('simError');
+      errBox.classList.add('hidden');
+      try {
+        const res = await apiFetch(`/simulate/merge/${prNum}`);
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ detail: `PR #${prNum} not found` }));
+          errBox.textContent = err.detail || `Could not simulate PR #${prNum}`;
+          errBox.classList.remove('hidden');
+          document.getElementById('simResults').classList.add('hidden');
+          return;
+        }
+        const sim = await res.json();
+
+        document.getElementById('simResults').classList.remove('hidden');
+        document.getElementById('simTargetHeader').innerHTML = `
+          <div class="truncate">
+            <span class="font-mono font-bold text-cyan-400 cursor-pointer hover:underline" onclick="openDrawer(${sim.merged_pr.number})">PR #${sim.merged_pr.number}</span>
+            ${ghLink(sim.merged_pr.number)}
+            <span class="text-slate-200 font-semibold ml-2">${esc(sim.merged_pr.title)}</span>
+          </div>
+          <span class="text-slate-400 shrink-0 ml-3">by <strong>${esc(sim.merged_pr.author)}</strong> · CI: <strong class="font-mono">${esc(sim.merged_pr.ci_status)}</strong></span>
+        `;
+
+        document.getElementById('simUnblockedSummary').textContent = `${sim.unblocks_count} PRs unblocked upon merge`;
+        document.getElementById('simHazardsSummary').textContent = `${sim.collision_hazards_count} PRs with concurrent file overlaps`;
+
+        const unblockList = document.getElementById('simUnblockedList');
+        unblockList.innerHTML = '';
+        if (sim.unblocked_prs.length === 0) {
+          unblockList.innerHTML = '<span class="text-xs text-slate-500 italic">No downstream PRs are waiting on this PR.</span>';
+        } else {
+          sim.unblocked_prs.forEach(p => {
+            const item = document.createElement('div');
+            item.className = "bg-dark-950 p-2.5 rounded border border-emerald-500/20 hover:border-emerald-500/40 cursor-pointer transition";
+            item.onclick = () => openDrawer(p.pr_number);
+            item.innerHTML = `
+              <div class="flex items-center justify-between">
+                <span class="font-mono font-bold text-emerald-400">PR #${p.pr_number} ${ghLink(p.pr_number)}</span>
+                <span class="text-[10px] px-2 py-0.5 rounded font-bold ${p.fully_unblocked ? 'bg-emerald-500/20 text-emerald-300' : 'bg-yellow-500/20 text-yellow-300'}">
+                  ${p.fully_unblocked ? 'READY TO LAND' : 'PARTIALLY UNBLOCKED'}
+                </span>
+              </div>
+              <p class="text-xs text-slate-300 mt-1 truncate">${esc(p.title)}</p>
+            `;
+            unblockList.appendChild(item);
+          });
+        }
+
+        const hazardList = document.getElementById('simHazardsList');
+        hazardList.innerHTML = '';
+        if (sim.collision_hazards.length === 0) {
+          hazardList.innerHTML = '<span class="text-xs text-slate-500 italic">No conflicting open PRs touching the same files.</span>';
+        } else {
+          sim.collision_hazards.forEach(h => {
+            const item = document.createElement('div');
+            item.className = "bg-dark-950 p-2.5 rounded border border-rose-500/20 hover:border-rose-500/40 cursor-pointer transition";
+            item.onclick = () => openDrawer(h.pr_number);
+            item.innerHTML = `
+              <div class="flex items-center justify-between">
+                <span class="font-mono font-bold text-cyan-400">PR #${h.pr_number} ${ghLink(h.pr_number)}</span>
+                <span class="text-[10px] px-2 py-0.5 rounded font-bold text-rose-400 bg-rose-500/10">${esc(h.risk_level)} RISK</span>
+              </div>
+              <p class="text-xs text-slate-300 mt-1 truncate">${esc(h.title)}</p>
+              <p class="text-[10px] text-slate-500 mt-1">Shared files: ${esc(h.overlapping_files.join(', '))}</p>
+            `;
+            hazardList.appendChild(item);
+          });
+        }
+      } catch (e) {
+        console.error('Error running simulation:', e);
+      }
+    }
+
+    // Dossier Slide-Over Drawer
+    async function openDrawer(prNum) {
+      try {
+        const res = await apiFetch(`/prs/${prNum}`);
+        if (!res.ok) return;
+        const dossier = await res.json();
+
+        document.getElementById('drawerPrBadge').textContent = `PR #${dossier.number}`;
+        document.getElementById('drawerTitle').textContent = dossier.title;
+        document.getElementById('drawerTitleLink').href = dossier.url;
+        document.getElementById('actOpen').href = dossier.url;
+        document.getElementById('actFiles').href = dossier.url + '/files';
+        document.getElementById('actChecks').href = dossier.url + '/checks';
+        document.getElementById('drawerAuthor').textContent = dossier.author;
+        document.getElementById('drawerIdleDays').textContent = `${dossier.staleness_days} days idle`;
+        document.getElementById('drawerUpdatedDate').textContent = dossier.updated_at_str || '';
+        document.getElementById('drawerDiagnosis').textContent = dossier.reason;
+
+        const statusBadge = document.getElementById('drawerStatusBadge');
+        statusBadge.textContent = dossier.status;
+        if (dossier.status === 'READY_TO_MERGE') statusBadge.className = 'text-xs px-2.5 py-0.5 rounded font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+        else if (dossier.status === 'BLOCKED_BY_DEP') statusBadge.className = 'text-xs px-2.5 py-0.5 rounded font-semibold bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30';
+        else if (dossier.status === 'CI_FAILURE' || dossier.status === 'CONFLICTING') statusBadge.className = 'text-xs px-2.5 py-0.5 rounded font-semibold bg-rose-500/20 text-rose-300 border border-rose-500/30';
+        else statusBadge.className = 'text-xs px-2.5 py-0.5 rounded font-semibold bg-slate-800 text-slate-300';
+
+        const riskBadgeEl = document.getElementById('drawerRiskBadge');
+        riskBadgeEl.textContent = `${dossier.risk_score} ${dossier.risk_level}`;
+        riskBadgeEl.className = `text-xs px-2 py-0.5 rounded font-bold font-mono ${riskClass(dossier.risk_level)}`;
+        const rc = dossier.risk_components;
+        const mathEl = document.getElementById('drawerRiskMath');
+        if (mathEl) {
+          if (rc) {
+            mathEl.textContent = `100 × (0.50×${rc.sensitivity.toFixed(2)} + 0.20×${rc.churn.toFixed(2)} + 0.30×${rc.collision.toFixed(2)}) = ${dossier.risk_score} ${dossier.risk_level}`;
+            mathEl.classList.remove('hidden');
+          } else {
+            mathEl.classList.add('hidden');
+          }
+        }
+        document.getElementById('drawerRiskAreas').innerHTML = (dossier.sensitive_areas || []).map(a =>
+          `<span class="px-1.5 py-0.5 rounded text-[10px] bg-rose-500/10 text-rose-300 border border-rose-500/20">${esc(a)}</span>`
+        ).join('');
+        document.getElementById('drawerRiskReasons').innerHTML = (dossier.risk_reasons && dossier.risk_reasons.length)
+          ? dossier.risk_reasons.map(r => `<li>${esc(r)}</li>`).join('')
+          : '<li class="text-slate-500 italic list-none">No risk signals</li>';
+
+        const flow = dossier.review_flow;
+        const waitEl = document.getElementById('drawerWaitingBadge');
+        const flowEl = document.getElementById('drawerReviewFlow');
+        if (flow) {
+          waitEl.textContent = flow.waiting_on === 'NONE' ? 'DRAFT' : `${flow.waiting_on} · ${flow.waiting_days.toFixed(0)}d`;
+          waitEl.className = `text-xs px-2 py-0.5 rounded font-bold font-mono ${waitingClass(flow.waiting_on)}`;
+          const lines = [
+            `<div>Reviews: <strong class="text-white">${flow.review_count}</strong>${flow.reviewers_engaged.length ? ' by ' + esc(flow.reviewers_engaged.join(', ')) : ''}</div>`,
+            `<div>Requested: ${flow.requested_reviewers.length ? flow.requested_reviewers.map(r => `<span class="font-mono text-violet-300">${esc(r)}</span>`).join(', ') : '<span class="text-slate-500">none</span>'}</div>`,
+          ];
+          if (flow.last_reviewer) lines.push(`<div>Last review: <span class="font-mono">${esc(flow.last_review_state)}</span> by ${esc(flow.last_reviewer)}</div>`);
+          if (!flow.has_review_signals) lines.push('<div class="text-slate-500 italic">No review events in cache; sync GitHub to load them.</div>');
+          flowEl.innerHTML = lines.join('');
+        } else {
+          waitEl.textContent = '—';
+          flowEl.innerHTML = '';
+        }
+
+        const ciEl = document.getElementById('drawerCi');
+        ciEl.textContent = dossier.ci_status;
+        ciEl.className = dossier.ci_status === 'SUCCESS'
+          ? 'font-bold text-emerald-400 mt-0.5 font-mono'
+          : (dossier.ci_status === 'FAILURE'
+              ? 'font-bold text-rose-400 mt-0.5 font-mono'
+              : 'font-bold text-amber-400 mt-0.5 font-mono');
+        document.getElementById('drawerReview').textContent = dossier.review_decision;
+        document.getElementById('drawerMergeable').textContent = dossier.mergeable;
+        document.getElementById('drawerFilesCount').textContent = `${dossier.files_changed_count} files`;
+
+        const blockedByContainer = document.getElementById('drawerBlockedBy');
+        blockedByContainer.innerHTML = (dossier.blocked_by && dossier.blocked_by.length)
+          ? dossier.blocked_by.map(n => prChip(n, 'fuchsia')).join('')
+          : '<span class="text-slate-500 italic font-sans text-xs">None (Unblocked)</span>';
+
+        const blocksContainer = document.getElementById('drawerBlocks');
+        blocksContainer.innerHTML = (dossier.blocks && dossier.blocks.length)
+          ? dossier.blocks.map(n => prChip(n, 'cyan')).join('')
+          : '<span class="text-slate-500 italic font-sans text-xs">None</span>';
+
+        const collisionsContainer = document.getElementById('drawerCollisionsList');
+        if (dossier.collisions && dossier.collisions.length > 0) {
+          collisionsContainer.innerHTML = dossier.collisions.map(c => `
+            <div onclick="openDrawer(${c.colliding_pr})" class="cursor-pointer bg-dark-950 p-2.5 rounded border border-slate-800 hover:border-slate-700 transition">
+              <div class="flex items-center justify-between">
+                <span class="font-mono font-bold text-cyan-400">PR #${c.colliding_pr} ${ghLink(c.colliding_pr)}</span>
+                <span class="text-xs font-bold ${c.risk_level === 'CRITICAL' ? 'text-rose-400' : 'text-amber-400'}">${esc(c.risk_level)}${c.is_live_race ? ' · 🔥 live race' : ''}</span>
+              </div>
+              <p class="text-xs text-slate-400 mt-1 truncate">Files: ${esc(c.overlapping_files.join(', '))}</p>
+            </div>
+          `).join('');
+        } else {
+          collisionsContainer.innerHTML = '<span class="text-slate-500 italic text-xs">No file collisions detected</span>';
+        }
+
+        document.getElementById('dossierDrawer').classList.remove('translate-x-full');
+      } catch (e) {
+        console.error('Error opening drawer:', e);
+      }
+    }
+
+    function closeDrawer() {
+      document.getElementById('dossierDrawer').classList.add('translate-x-full');
+    }
+
+    // Filters & Controls
+    function setSubsystemFilter(filter, btnEl) {
+      currentFilter = filter;
+      document.querySelectorAll('.subsystem-pill').forEach(btn => {
+        btn.className = "subsystem-pill px-2.5 py-0.5 rounded-full font-medium bg-slate-800 text-slate-400 hover:text-slate-200 transition shrink-0";
+      });
+      if (btnEl) {
+        btnEl.className = "subsystem-pill px-2.5 py-0.5 rounded-full font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 transition shrink-0";
+      }
+      syncBrowserUrl(false);
+      loadActivePage();
+    }
+
+    function handleSearch(q) {
+      searchQuery = q.toLowerCase().trim();
+      const clearBtn = document.getElementById('clearSearchBtn');
+      if (searchQuery) clearBtn.classList.remove('hidden'); else clearBtn.classList.add('hidden');
+      syncBrowserUrl(false);
+      if (activePage === 'triage') fetchTriage();
+      else if (activePage === 'collisions') fetchCollisions();
+      else if (activePage === 'reviewers') fetchReviewers();
+      else if (activePage === 'dag' && lastDagData) renderDag(lastDagData);
+    }
+
+    function clearSearch() {
+      document.getElementById('searchInput').value = '';
+      handleSearch('');
+    }
+
+    function updateDagScopeButtons() {
+      const btnStacks = document.getElementById('scopeStacksBtn');
+      const btnAll = document.getElementById('scopeAllBtn');
+      if (!btnStacks || !btnAll) return;
+      if (dagScope === 'stacks') {
+        btnStacks.className = "px-2.5 py-1 rounded font-semibold bg-emerald-500 text-white transition";
+        btnAll.className = "px-2.5 py-1 rounded font-semibold bg-slate-800 text-slate-400 hover:text-white transition";
+      } else {
+        btnAll.className = "px-2.5 py-1 rounded font-semibold bg-emerald-500 text-white transition";
+        btnStacks.className = "px-2.5 py-1 rounded font-semibold bg-slate-800 text-slate-400 hover:text-white transition";
+      }
+    }
+
+    function setDagScope(scope) {
+      dagScope = scope;
+      updateDagScopeButtons();
+      fetchDag();
+    }
+
+    window.addEventListener('popstate', async () => {
+      const params = new URLSearchParams(window.location.search);
+      activePage = pageFromLocation();
+      activeCollisionFile = params.get('file') || '';
+      currentFilter = params.get('subsystem') || 'ALL';
+      searchQuery = (params.get('q') || '').toLowerCase();
+      selectedReviewer = params.get('reviewer') || (activePage === 'reviewers' ? params.get('q') : '') || '';
+      document.getElementById('searchInput').value = params.get('q') || '';
+      document.getElementById('clearSearchBtn').classList.toggle('hidden', !searchQuery);
+      renderPageChrome();
+      await fetchSubsystems();
+      await loadActivePage();
+    });
+
+    window.addEventListener('DOMContentLoaded', async () => {
+      if (window.PR_RADAR_STATIC) {
+        const apiLink = document.getElementById('apiDocsLink');
+        const apiLbl = document.getElementById('apiDocsLabel');
+        if (apiLink) { apiLink.href = '/static-data/overview.json'; apiLink.title = 'Snapshot JSON'; }
+        if (apiLbl) apiLbl.textContent = 'JSON';
+        document.querySelectorAll('.nav-link').forEach(a => {
+          if (a.dataset.page) a.setAttribute('href', pageHref(a.dataset.page));
+        });
+      }
+      if (searchQuery) {
+        document.getElementById('searchInput').value = searchQuery;
+        document.getElementById('clearSearchBtn').classList.remove('hidden');
+      }
+      updateDagScopeButtons();
+      renderPageChrome();
+      await fetchOverview();
+      await fetchSubsystems();
+      await loadActivePage();
+    });
+  </script>
+</body>
+</html>
